@@ -326,11 +326,7 @@ uint8_t Segment::currentBri(uint8_t briNew, bool useCct) {
 }
 
 uint8_t Segment::currentMode(uint8_t newMode) {
-  if (transitional && _t) {
-    return _t->_modeP;
-  } else {
-    return newMode;
-  }
+  return (progress()>32767U) ? newMode : _t->_modeP; // change effect in the middle of transition
 }
 
 uint32_t Segment::currentColor(uint8_t slot, uint32_t colorNew) {
@@ -369,6 +365,7 @@ bool Segment::setColor(uint8_t slot, uint32_t c) { //returns true if changed
   if (slot >= NUM_COLORS || c == colors[slot]) return false;
   if (fadeTransition) startTransition(strip.getTransition()); // start transition prior to change
   colors[slot] = c;
+  stateChanged = true; // send UDP/WS broadcast
   return true;
 }
 
@@ -381,12 +378,14 @@ void Segment::setCCT(uint16_t k) {
   if (cct == k) return;
   if (fadeTransition) startTransition(strip.getTransition()); // start transition prior to change
   cct = k;
+  stateChanged = true; // send UDP/WS broadcast
 }
 
 void Segment::setOpacity(uint8_t o) {
   if (opacity == o) return;
   if (fadeTransition) startTransition(strip.getTransition()); // start transition prior to change
   opacity = o;
+  stateChanged = true; // send UDP/WS broadcast
 }
 
 void Segment::setOption(uint8_t n, bool val) {
@@ -394,6 +393,7 @@ void Segment::setOption(uint8_t n, bool val) {
   if (fadeTransition && n == SEG_OPTION_ON && val != prevOn) startTransition(strip.getTransition()); // start transition prior to change
   if (val) options |=   0x01 << n;
   else     options &= ~(0x01 << n);
+  if (!(n == SEG_OPTION_SELECTED || n == SEG_OPTION_RESET || n == SEG_OPTION_TRANSITIONAL)) stateChanged = true; // send UDP/WS broadcast
 }
 
 void Segment::setMode(uint8_t fx, bool loadDefaults) {
@@ -412,29 +412,26 @@ void Segment::setMode(uint8_t fx, bool loadDefaults) {
         sOpt = extractModeDefaults(fx, "c1");   if (sOpt >= 0) custom1   = sOpt;
         sOpt = extractModeDefaults(fx, "c2");   if (sOpt >= 0) custom2   = sOpt;
         sOpt = extractModeDefaults(fx, "c3");   if (sOpt >= 0) custom3   = sOpt;
-        sOpt = extractModeDefaults(fx, "mp12"); if (sOpt >= 0) map1D2D   = constrain(sOpt, 0, 7);
-        sOpt = extractModeDefaults(fx, "ssim"); if (sOpt >= 0) soundSim  = constrain(sOpt, 0, 7);
+        sOpt = extractModeDefaults(fx, "m12");  if (sOpt >= 0) map1D2D   = constrain(sOpt, 0, 7);
+        sOpt = extractModeDefaults(fx, "si");   if (sOpt >= 0) soundSim  = constrain(sOpt, 0, 7);
         sOpt = extractModeDefaults(fx, "rev");  if (sOpt >= 0) reverse   = (bool)sOpt;
         sOpt = extractModeDefaults(fx, "mi");   if (sOpt >= 0) mirror    = (bool)sOpt; // NOTE: setting this option is a risky business
         sOpt = extractModeDefaults(fx, "rY");   if (sOpt >= 0) reverse_y = (bool)sOpt;
         sOpt = extractModeDefaults(fx, "mY");   if (sOpt >= 0) mirror_y  = (bool)sOpt; // NOTE: setting this option is a risky business
-        sOpt = extractModeDefaults(fx, "pal");
-        if (sOpt >= 0 && (size_t)sOpt < strip.getPaletteCount() + strip.customPalettes.size()) {
-          if (sOpt != palette) {
-            palette = sOpt;
-          }
-        }
+        sOpt = extractModeDefaults(fx, "pal");  if (sOpt >= 0) setPalette(sOpt);
       }
+      stateChanged = true; // send UDP/WS broadcast
     }
   }
 }
 
 void Segment::setPalette(uint8_t pal) {
-  if (pal < strip.getPaletteCount()) {
-    if (pal != palette) {
-      if (strip.paletteFade) startTransition(strip.getTransition());
-      palette = pal;
-    }
+  if (pal < 245 && pal > GRADIENT_PALETTE_COUNT+13) pal = 0; // built in palettes
+  if (pal > 245 && (strip.customPalettes.size() == 0 || 255U-pal > strip.customPalettes.size()-1)) pal = 0; // custom palettes
+  if (pal != palette) {
+    if (strip.paletteFade) startTransition(strip.getTransition());
+    palette = pal;
+    stateChanged = true; // send UDP/WS broadcast
   }
 }
 
@@ -671,11 +668,10 @@ uint8_t Segment::differs(Segment& b) const {
   if (startY != b.startY)       d |= SEG_DIFFERS_BOUNDS;
   if (stopY != b.stopY)         d |= SEG_DIFFERS_BOUNDS;
 
-  //bit pattern: msb first: [transposed mirrorY reverseY] transitional (tbd) paused needspixelstate mirrored on reverse selected
-  if ((options & 0b1111111110011110) != (b.options & 0b1111111110011110)) d |= SEG_DIFFERS_OPT;
-  if ((options & 0x01) != (b.options & 0x01))                             d |= SEG_DIFFERS_SEL;
-  
-  for (uint8_t i = 0; i < NUM_COLORS; i++) if (colors[i] != b.colors[i])  d |= SEG_DIFFERS_COL;
+  //bit pattern: (msb first) sound:3, mapping:3, transposed, mirrorY, reverseY, [transitional, reset,] paused, mirrored, on, reverse, [selected]
+  if ((options & 0b1111111110011110U) != (b.options & 0b1111111110011110U)) d |= SEG_DIFFERS_OPT;
+  if ((options & 0x0001U) != (b.options & 0x0001U))                         d |= SEG_DIFFERS_SEL;
+  for (uint8_t i = 0; i < NUM_COLORS; i++) if (colors[i] != b.colors[i])    d |= SEG_DIFFERS_COL;
 
   return d;
 }
@@ -963,7 +959,8 @@ void WS2812FX::finalizeInit(void)
   }
 
   //segments are created in makeAutoSegments();
-  setBrightness(_brightness);
+  loadCustomPalettes(); // (re)load all custom palettes
+  deserializeMap();     // (re)load default ledmap
 }
 
 void WS2812FX::service() {
@@ -1499,6 +1496,7 @@ void WS2812FX::loadCustomPalettes()
 {
   byte tcp[72]; //support gradient palettes with up to 18 entries
   CRGBPalette16 targetPalette;
+  customPalettes.clear(); // start fresh
   for (int index = 0; index<10; index++) {
     char fileName[32];
     sprintf_P(fileName, PSTR("/palette%d.json"), index);
