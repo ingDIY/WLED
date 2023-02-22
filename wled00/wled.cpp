@@ -100,11 +100,6 @@ void WLED::loop()
     yield();
     #endif
 
-    #ifndef WLED_DISABLE_BLYNK
-    handleBlynk();
-    yield();
-    #endif
-
     handlePresets();
     yield();
 
@@ -171,15 +166,14 @@ void WLED::loop()
       }
       delete busConfigs[i]; busConfigs[i] = nullptr;
     }
-    strip.finalizeInit();
-    loadLedmap = 0;
+    strip.finalizeInit(); // also loads default ledmap if present
     if (aligned) strip.makeAutoSegments();
     else strip.fixInvalidSegments();
     yield();
     serializeConfig();
   }
   if (loadLedmap >= 0) {
-    strip.deserializeMap(loadLedmap);
+    if (!strip.deserializeMap(loadLedmap) && strip.isMatrix && loadLedmap == 0) strip.setUpMatrix();
     loadLedmap = -1;
   }
 
@@ -719,9 +713,6 @@ void WLED::initInterfaces()
   if (ntpEnabled)
     ntpConnected = ntpUdp.begin(ntpLocalPort);
 
-#ifndef WLED_DISABLE_BLYNK
-  initBlynk(blynkApiKey, blynkHost, blynkPort);
-#endif
   e131.begin(e131Multicast, e131Port, e131Universe, E131_MAX_UNIVERSE_COUNT);
   ddp.begin(false, DDP_DEFAULT_PORT);
   reconnectHue();
