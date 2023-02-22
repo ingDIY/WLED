@@ -643,8 +643,14 @@ void serializeInfo(JsonObject root)
   root[F("cpalcount")] = strip.customPalettes.size(); //number of custom palettes
 
   JsonArray ledmaps = root.createNestedArray(F("maps"));
-  for (size_t i=0; i<10; i++) {
-    if ((ledMaps>>i) & 0x0001) ledmaps.add(i);
+  for (size_t i=0; i<WLED_MAX_LEDMAPS; i++) {
+    if ((ledMaps>>i) & 0x00000001U) {
+      JsonObject ledmaps0 = ledmaps.createNestedObject();
+      ledmaps0["id"] = i;
+      #ifndef ESP8266
+      if (i && ledmapNames[i-1]) ledmaps0["n"] = ledmapNames[i-1];
+      #endif
+    }
   }
 
   JsonObject wifi_info = root.createNestedObject("wifi");
@@ -707,9 +713,9 @@ void serializeInfo(JsonObject root)
   #ifndef WLED_DISABLE_ALEXA
   os += 0x40;
   #endif
-  #ifndef WLED_DISABLE_BLYNK
-  os += 0x20;
-  #endif
+
+  //os += 0x20; // indicated now removed Blynk support, may be reused to indicate another build-time option
+
   #ifdef USERMOD_CRONIXIE
   os += 0x10;
   #endif
