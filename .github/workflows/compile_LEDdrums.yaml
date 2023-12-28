@@ -70,4 +70,4 @@ jobs:
         git add $GITHUB_WORKSPACE/custom_build.bin
         git add $GITHUB_WORKSPACE/last_update_date.txt
         git commit -m "Commit Custom Build"
-        git push origin main
+        git push origin develop
