@@ -54,15 +54,18 @@ jobs:
         WLEDFOLDERNAME=`cat /tmp/WLEDtemp/wledfoldername`
         cp ${WLEDFOLDERNAME}/build_output/firmware/LEDctrl.bin $GITHUB_WORKSPACE/_flashing/
 
-        echo '@echo off                                             ' >$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'echo Flashing LEDctrl firmware...                     ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'esptool.py write_flash 0x10000 ./LEDctrl.bin          ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'echo.                                                 ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'echo Flashing done !!                                 ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'timeout 5                                             ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'exit                                                  ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+    - name: Create utility files
+      run: |
+        cd $GITHUB_WORKSPACE
+        echo '@echo off' >$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'echo Flashing LEDctrl firmware...' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'esptool.py write_flash 0x10000 ./LEDctrl.bin' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'echo.' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'echo Flashing done !!' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'timeout 5' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'exit' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
 
-        date -I | tr -d '\n' >$GITHUB_WORKSPACE/_flashing/LEDctrl_last_build_date.txt
+        date '+%Y/%m/%d%t%T' >$GITHUB_WORKSPACE/_flashing/LEDctrl_last_build_date.txt
 
     - name: Commit Files
       run: |
