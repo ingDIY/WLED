@@ -2,6 +2,7 @@ name: compile ingDIY WLED
 
 on:
     workflow_dispatch:
+    push:
 
 jobs:
   build:
@@ -126,6 +127,8 @@ jobs:
         cd $GITHUB_WORKSPACE
         WLEDFOLDERNAME=`cat /tmp/WLEDtemp/wledfoldername`
         cp ${WLEDFOLDERNAME}/build_output/firmware/LEDdrums.bin $GITHUB_WORKSPACE/_flashing/
+        cp ${WLEDFOLDERNAME}/build_output/firmware/LEDremote.bin $GITHUB_WORKSPACE/_flashing/
+        cp ${WLEDFOLDERNAME}/build_output/firmware/LEDctrl.bin $GITHUB_WORKSPACE/_flashing/
 
     - name: Create utility files
       run: |
