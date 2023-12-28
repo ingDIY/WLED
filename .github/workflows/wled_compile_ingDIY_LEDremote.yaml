@@ -77,7 +77,6 @@ jobs:
 
     - name: Create utility files
       run: |
-        cd $GITHUB_WORKSPACE
         echo '@echo off' >$GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
         echo 'echo Flashing LEDremote firmware...' >>$GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
         echo 'esptool.py write_flash 0x10000 ./LEDremote.bin' >>$GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
