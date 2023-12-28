@@ -2,6 +2,10 @@ name: compile ingDIY LEDremote
 
 on:
     workflow_dispatch:
+    workflow_run:
+        workflows: ["compile ingDIY LEDdrums"]
+        types:
+          - completed
 
 jobs:
   build:
