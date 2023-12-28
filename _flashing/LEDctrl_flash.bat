@@ -1,13 +1,8 @@
 @echo off
-echo ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-echo ++++                    ESP32 Firmware flashing script:                     ++++
-echo ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-echo.
-echo.
-echo Programming Bootloader...
+echo Flashing LEDctrl firmware...
 esptool.py write_flash 0x10000 ./LEDctrl.bin
 echo --------------------------------------------------------------------------------
 echo.
-echo Programming done !!
+echo Flashing done !!
 timeout 5
 exit

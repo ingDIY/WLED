@@ -1,0 +1,76 @@
+name: compile ingDIY WLED
+
+on:
+    workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade platformio
+    - name: Run PlatformIO
+      run: |
+        rm -rf /tmp/WLEDtemp/* || true
+        mkdir -p /tmp/WLEDtemp
+        wget https://github.com/Aircoookie/WLED/archive/refs/heads/main.zip -O /tmp/WLEDtemp/mm.zip
+        unzip /tmp/WLEDtemp/mm.zip -d /tmp/WLEDtemp
+        find /tmp/WLEDtemp -maxdepth 1 -mindepth 1 -name "*" -type d >> /tmp/WLEDtemp/wledfoldername
+        cd `cat /tmp/WLEDtemp/wledfoldername`
+
+        echo '# setup for: LED CTRL; PCB ver 2.22; variant "SERIAL_12V" ver 2.24          ' >>platformio.ini
+        echo '[env:LEDctrl]                                                               ' >>platformio.ini
+        echo 'extends = env:esp32dev                                                      ' >>platformio.ini
+        echo 'build_flags = ${common.build_flags_esp32}                                   ' >>platformio.ini
+        echo '  -D WLED_MAX_BUTTONS=1                                                     ' >>platformio.ini
+        echo '  -D BTNPIN=-1                                                              ' >>platformio.ini
+        echo '  -D LEDPIN=4                                                               ' >>platformio.ini
+        echo '  -D DEFAULT_LED_COUNT=50                                                   ' >>platformio.ini
+        echo '  -D DEFAULT_LED_TYPE=TYPE_WS2812_RGB                                       ' >>platformio.ini
+        echo '  -D DEFAULT_LED_COLOR_ORDER=COL_ORDER_GRB                                  ' >>platformio.ini
+        echo '  -D ABL_MILLIAMPS_DEFAULT=0                                                ' >>platformio.ini
+        echo '  -D USERMOD_AUTO_SAVE                                                      ' >>platformio.ini
+        echo '  -D AUTOSAVE_AFTER_SEC=10                                                  ' >>platformio.ini
+        echo '  -D USERMOD_AUTO_SAVE_ON_BOOT=true                                         ' >>platformio.ini
+        echo '  -D WLED_AP_SSID_UNIQUE                                                    ' >>platformio.ini
+        echo '  -D SERVERNAME="\"LEDctrl\""                                               ' >>platformio.ini
+        echo 'lib_deps = ${esp32.lib_deps}                                                ' >>platformio.ini
+        echo '  https://github.com/kosme/arduinoFFT#develop @ 1.9.2                       ' >>platformio.ini
+        pio run -e LEDctrl || pio run -e LEDctrl
+
+    - name: Copy Files
+      run: |
+        cd $GITHUB_WORKSPACE
+        git rm -r $GITHUB_WORKSPACE/*.bin || true
+        WLEDFOLDERNAME=`cat /tmp/WLEDtemp/wledfoldername`
+        cp ${WLEDFOLDERNAME}/build_output/firmware/LEDctrl.bin $GITHUB_WORKSPACE/_flashing/
+
+        echo '@echo off                                             ' >$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'echo Flashing LEDctrl firmware...                     ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'esptool.py write_flash 0x10000 ./LEDctrl.bin          ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'echo.                                                 ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'echo Flashing done !!                                 ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'timeout 5                                             ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        echo 'exit                                                  ' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+
+        date -I | tr -d '\n' >$GITHUB_WORKSPACE/_flashing/LEDctrl_last_build_date.txt
+
+    - name: Commit Files
+      run: |
+        cd $GITHUB_WORKSPACE
+        git config user.name "GitHub Actions Bot"
+        git config user.email "<>"
+        git add $GITHUB_WORKSPACE/_flashing/LEDctrl.bin
+        git add $GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
+        git add $GITHUB_WORKSPACE/_flashing/LEDctrl_last_build_date.txt
+        git commit -m "Commit Custom Build"
+        git push origin develop
