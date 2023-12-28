@@ -3,6 +3,8 @@ name: compile ingDIY WLED
 on:
     workflow_dispatch:
     push:
+      branches:
+      - master
 
 jobs:
   build:
