@@ -55,7 +55,6 @@ jobs:
 
     - name: Create utility files
       run: |
-        cd $GITHUB_WORKSPACE
         echo '@echo off' >$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
         echo 'echo Flashing LEDctrl firmware...' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
         echo 'esptool.py write_flash 0x10000 ./LEDctrl.bin' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat

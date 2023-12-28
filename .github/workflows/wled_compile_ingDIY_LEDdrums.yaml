@@ -66,7 +66,6 @@ jobs:
 
     - name: Create utility files
       run: |
-        cd $GITHUB_WORKSPACE
         echo '@echo off' >$GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
         echo 'echo Flashing LEDdrums firmware...' >>$GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
         echo 'esptool.py write_flash 0x10000 ./LEDdrums.bin' >>$GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
