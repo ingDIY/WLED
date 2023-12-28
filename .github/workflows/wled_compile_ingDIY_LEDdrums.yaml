@@ -61,7 +61,6 @@ jobs:
     - name: Copy Files
       run: |
         cd $GITHUB_WORKSPACE
-        git rm $GITHUB_WORKSPACE/*.bin || true
         WLEDFOLDERNAME=`cat /tmp/WLEDtemp/wledfoldername`
         cp ${WLEDFOLDERNAME}/build_output/firmware/LEDdrums.bin $GITHUB_WORKSPACE/_flashing/
 
@@ -87,4 +86,4 @@ jobs:
         git add $GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
         git add $GITHUB_WORKSPACE/_flashing/LEDdrums_last_build_date.txt
         git commit -m "Commit Custom Build"
-        git push origin master
+        git push origin develop
