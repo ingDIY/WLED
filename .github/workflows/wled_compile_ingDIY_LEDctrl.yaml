@@ -1,4 +1,4 @@
-name: compile ingDIY WLED
+name: compile ingDIY LEDctrl
 
 on:
     workflow_dispatch:
