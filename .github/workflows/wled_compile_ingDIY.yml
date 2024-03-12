@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -21,6 +22,10 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install --upgrade platformio
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+
     - name: Run PlatformIO
       run: |
         rm -rf /tmp/WLEDtemp/* || true
@@ -29,6 +34,7 @@ jobs:
         unzip /tmp/WLEDtemp/mm.zip -d /tmp/WLEDtemp
         find /tmp/WLEDtemp -maxdepth 1 -mindepth 1 -name "*" -type d >> /tmp/WLEDtemp/wledfoldername
         cd `cat /tmp/WLEDtemp/wledfoldername`
+        npm install
 
         echo '# setup for: LED Drums; PCB ver 4.20; variant "LED" ver 4.20                ' >>platformio.ini
         echo '[env:LEDdrums]                                                              ' >>platformio.ini
@@ -48,6 +54,7 @@ jobs:
         echo '  -D AUTOSAVE_AFTER_SEC=10                                                  ' >>platformio.ini
         echo '  -D USERMOD_AUTO_SAVE_ON_BOOT=true                                         ' >>platformio.ini
         echo '  -D USERMOD_AUDIOREACTIVE                                                  ' >>platformio.ini
+        echo '  -D UM_AUDIOREACTIVE_ENABLE                                                ' >>platformio.ini
         echo '  -D UM_AUDIOREACTIVE_USE_NEW_FFT                                           ' >>platformio.ini
         echo '  -D SR_DMTYPE=4                        # 4=generic I2S with master clock   ' >>platformio.ini
         echo '  -D I2S_CKPIN=18                                                           ' >>platformio.ini
@@ -66,7 +73,7 @@ jobs:
         echo '  -D WLED_DISABLE_2D                                                        ' >>platformio.ini
         echo '  -D WLED_DISABLE_INFRARED                                                  ' >>platformio.ini
         echo 'lib_deps = ${env:esp32dev.lib_deps}                                         ' >>platformio.ini
-        echo '  https://github.com/kosme/arduinoFFT#develop @ 1.9.2                       ' >>platformio.ini
+        echo '  https://github.com/kosme/arduinoFFT#419d7b0                               ' >>platformio.ini
 
         echo '# setup for: LED Drums; PCB ver 2.63; variant "LED Drums" ver 2.60          ' >>platformio.ini
         echo '[env:LEDremote]                                                             ' >>platformio.ini
@@ -85,6 +92,7 @@ jobs:
         echo '  -D AUTOSAVE_AFTER_SEC=10                                                  ' >>platformio.ini
         echo '  -D USERMOD_AUTO_SAVE_ON_BOOT=true                                         ' >>platformio.ini
         echo '  -D USERMOD_AUDIOREACTIVE                                                  ' >>platformio.ini
+        echo '  -D UM_AUDIOREACTIVE_ENABLE                                                ' >>platformio.ini
         echo '  -D UM_AUDIOREACTIVE_USE_NEW_FFT                                           ' >>platformio.ini
         echo '  -D SR_DMTYPE=1                        # 1=generic I2S (default)           ' >>platformio.ini
         echo '  -D I2S_CKPIN=17                                                           ' >>platformio.ini
@@ -109,7 +117,7 @@ jobs:
         echo '  -D WLED_DISABLE_WEBSOCKETS                                                ' >>platformio.ini
         echo '  -D WLED_DISABLE_2D                                                        ' >>platformio.ini
         echo 'lib_deps = ${env:esp32dev.lib_deps}                                         ' >>platformio.ini
-        echo '  https://github.com/kosme/arduinoFFT#develop @ 1.9.2                       ' >>platformio.ini
+        echo '  https://github.com/kosme/arduinoFFT#419d7b0                               ' >>platformio.ini
         echo '  U8g2                                  # For use SSD1306 OLED display      ' >>platformio.ini
         echo '  Wire                                  # For use SSD1306 OLED display      ' >>platformio.ini
         echo 'lib_ignore =                                                                ' >>platformio.ini
@@ -141,7 +149,7 @@ jobs:
         echo '  -D WLED_DISABLE_2D                                                        ' >>platformio.ini
         echo '  -D WLED_DISABLE_INFRARED                                                  ' >>platformio.ini
         echo 'lib_deps = ${env:esp32dev.lib_deps}                                         ' >>platformio.ini
-        echo '  https://github.com/kosme/arduinoFFT#develop @ 1.9.2                       ' >>platformio.ini
+        echo '  https://github.com/kosme/arduinoFFT#419d7b0                               ' >>platformio.ini
 
         pio run -e LEDdrums || pio run -e LEDdrums
         pio run -e LEDremote || pio run -e LEDremote
@@ -206,4 +214,4 @@ jobs:
         git pull
         git checkout develop
         git merge master
-        git push
+        git push origin develop
