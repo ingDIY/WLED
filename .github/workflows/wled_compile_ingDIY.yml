@@ -209,7 +209,7 @@ jobs:
         git add $GITHUB_WORKSPACE/_flashing/LEDctrl.bin
         git add $GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
         git add $GITHUB_WORKSPACE/_flashing/LEDctrl_last_build_date.txt
-        git commit -m "Commit Custom Build"
+        git commit -m "commit Actions Bot compiled builds"
         git push origin master
         git pull
         git checkout develop
