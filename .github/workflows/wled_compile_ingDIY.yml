@@ -11,12 +11,10 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
       with:
-        python-version: 3.9
+        python-version: '3.12'
 
     - name: Install PlatformIO
       run: |
@@ -55,7 +53,6 @@ jobs:
         echo '  -D USERMOD_AUTO_SAVE_ON_BOOT=true                                         ' >>platformio.ini
         echo '  -D USERMOD_AUDIOREACTIVE                                                  ' >>platformio.ini
         echo '  -D UM_AUDIOREACTIVE_ENABLE                                                ' >>platformio.ini
-        echo '  -D UM_AUDIOREACTIVE_USE_NEW_FFT                                           ' >>platformio.ini
         echo '  -D SR_DMTYPE=4                        # 4=generic I2S with master clock   ' >>platformio.ini
         echo '  -D I2S_CKPIN=18                                                           ' >>platformio.ini
         echo '  -D I2S_SDPIN=5                                                            ' >>platformio.ini
@@ -73,7 +70,7 @@ jobs:
         echo '  -D WLED_DISABLE_2D                                                        ' >>platformio.ini
         echo '  -D WLED_DISABLE_INFRARED                                                  ' >>platformio.ini
         echo 'lib_deps = ${env:esp32dev.lib_deps}                                         ' >>platformio.ini
-        echo '  https://github.com/kosme/arduinoFFT#419d7b0                               ' >>platformio.ini
+        echo '  kosme/arduinoFFT @ 2.0.1                                                  ' >>platformio.ini
 
         echo '# setup for: LED Drums; PCB ver 2.63; variant "LED Drums" ver 2.60          ' >>platformio.ini
         echo '[env:LEDremote]                                                             ' >>platformio.ini
@@ -93,7 +90,6 @@ jobs:
         echo '  -D USERMOD_AUTO_SAVE_ON_BOOT=true                                         ' >>platformio.ini
         echo '  -D USERMOD_AUDIOREACTIVE                                                  ' >>platformio.ini
         echo '  -D UM_AUDIOREACTIVE_ENABLE                                                ' >>platformio.ini
-        echo '  -D UM_AUDIOREACTIVE_USE_NEW_FFT                                           ' >>platformio.ini
         echo '  -D SR_DMTYPE=1                        # 1=generic I2S (default)           ' >>platformio.ini
         echo '  -D I2S_CKPIN=17                                                           ' >>platformio.ini
         echo '  -D I2S_SDPIN=16                                                           ' >>platformio.ini
@@ -117,7 +113,7 @@ jobs:
         echo '  -D WLED_DISABLE_WEBSOCKETS                                                ' >>platformio.ini
         echo '  -D WLED_DISABLE_2D                                                        ' >>platformio.ini
         echo 'lib_deps = ${env:esp32dev.lib_deps}                                         ' >>platformio.ini
-        echo '  https://github.com/kosme/arduinoFFT#419d7b0                               ' >>platformio.ini
+        echo '  kosme/arduinoFFT @ 2.0.1                                                  ' >>platformio.ini
         echo '  U8g2                                  # For use SSD1306 OLED display      ' >>platformio.ini
         echo '  Wire                                  # For use SSD1306 OLED display      ' >>platformio.ini
         echo 'lib_ignore =                                                                ' >>platformio.ini
@@ -149,7 +145,7 @@ jobs:
         echo '  -D WLED_DISABLE_2D                                                        ' >>platformio.ini
         echo '  -D WLED_DISABLE_INFRARED                                                  ' >>platformio.ini
         echo 'lib_deps = ${env:esp32dev.lib_deps}                                         ' >>platformio.ini
-        echo '  https://github.com/kosme/arduinoFFT#419d7b0                               ' >>platformio.ini
+        echo '  kosme/arduinoFFT @ 2.0.1                                                  ' >>platformio.ini
 
         pio run -e LEDdrums || pio run -e LEDdrums
         pio run -e LEDremote || pio run -e LEDremote
