@@ -73,7 +73,7 @@ jobs:
         echo 'lib_deps = ${env:esp32dev.lib_deps}                                         ' >>platformio.ini
         echo '  kosme/arduinoFFT @ 2.0.1                                                  ' >>platformio.ini
 
-        echo '# setup for: LED Drums; PCB ver 2.63; variant "LED Drums" ver 2.60          ' >>platformio.ini
+        echo '# setup for: LED Remote; PCB ver 2.63; variant "LED Drums" ver 2.60          ' >>platformio.ini
         echo '[env:LEDremote]                                                             ' >>platformio.ini
         echo 'extends = env:esp32dev                                                      ' >>platformio.ini
         echo 'build_flags = ${env:esp32dev.build_flags}                                   ' >>platformio.ini
