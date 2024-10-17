@@ -41,9 +41,9 @@ jobs:
         echo 'build_flags = ${env:esp32dev.build_flags}                                   ' >>platformio.ini
         echo '  -D WLED_MAX_BUTTONS=1                                                     ' >>platformio.ini
         echo '  -D BTNPIN=-1                                                              ' >>platformio.ini
-        echo '  -D LEDPIN=16                                                              ' >>platformio.ini
-        echo '  -D DEFAULT_LED_COUNT=50                                                   ' >>platformio.ini
-        echo '  -D DEFAULT_LED_TYPE=TYPE_WS2812_RGB                                       ' >>platformio.ini
+        echo '  -D DATA_PINS=16                                                           ' >>platformio.ini
+        echo '  -D PIXEL_COUNTS=50                                                        ' >>platformio.ini
+        echo '  -D LED_TYPES=TYPE_WS2812_RGB                                              ' >>platformio.ini
         echo '  -D DEFAULT_LED_COLOR_ORDER=COL_ORDER_GRB                                  ' >>platformio.ini
         echo '  -D ABL_MILLIAMPS_DEFAULT=1000                                             ' >>platformio.ini
         echo '  -D WLED_AP_SSID_UNIQUE                                                    ' >>platformio.ini
@@ -73,14 +73,14 @@ jobs:
         echo 'lib_deps = ${env:esp32dev.lib_deps}                                         ' >>platformio.ini
         echo '  kosme/arduinoFFT @ 2.0.1                                                  ' >>platformio.ini
 
-        echo '# setup for: LED Remote; PCB ver 2.63; variant "LED Drums" ver 2.60          ' >>platformio.ini
+        echo '# setup for: LED Remote; PCB ver 2.63; variant "LED Drums" ver 2.60         ' >>platformio.ini
         echo '[env:LEDremote]                                                             ' >>platformio.ini
         echo 'extends = env:esp32dev                                                      ' >>platformio.ini
         echo 'build_flags = ${env:esp32dev.build_flags}                                   ' >>platformio.ini
         echo '  -D WLED_MAX_BUTTONS=1                                                     ' >>platformio.ini
         echo '  -D BTNPIN=-1                                                              ' >>platformio.ini
-        echo '  -D DEFAULT_LED_COUNT=0                                                    ' >>platformio.ini
-        echo '  -D DEFAULT_LED_TYPE=TYPE_NONE                                             ' >>platformio.ini
+        echo '  -D PIXEL_COUNTS=0                                                         ' >>platformio.ini
+        echo '  -D LED_TYPES=TYPE_NONE                                                    ' >>platformio.ini
         echo '  -D WLED_ENABLE_INFRARED                                                   ' >>platformio.ini
         echo '  -D IRPIN=12                                                               ' >>platformio.ini
         echo '  -D IRTYPE=4                           # 4= 40-key RGB                     ' >>platformio.ini
@@ -116,9 +116,6 @@ jobs:
         echo '  kosme/arduinoFFT @ 2.0.1                                                  ' >>platformio.ini
         echo '  U8g2                                  # For use SSD1306 OLED display      ' >>platformio.ini
         echo '  Wire                                  # For use SSD1306 OLED display      ' >>platformio.ini
-        echo 'lib_ignore =                                                                ' >>platformio.ini
-        echo '  ESPAsyncTCP                                                               ' >>platformio.ini
-        echo '  ESPAsyncUDP                                                               ' >>platformio.ini
 
         echo '# setup for: LED CTRL; PCB ver 2.22; variant "SERIAL_12V" ver 2.24          ' >>platformio.ini
         echo '[env:LEDctrl]                                                               ' >>platformio.ini
@@ -126,9 +123,9 @@ jobs:
         echo 'build_flags = ${env:esp32dev.build_flags}                                   ' >>platformio.ini
         echo '  -D WLED_MAX_BUTTONS=1                                                     ' >>platformio.ini
         echo '  -D BTNPIN=-1                                                              ' >>platformio.ini
-        echo '  -D LEDPIN=4                                                               ' >>platformio.ini
-        echo '  -D DEFAULT_LED_COUNT=50                                                   ' >>platformio.ini
-        echo '  -D DEFAULT_LED_TYPE=TYPE_WS2812_RGB                                       ' >>platformio.ini
+        echo '  -D DATA_PINS=4                                                            ' >>platformio.ini
+        echo '  -D PIXEL_COUNTS=50                                                        ' >>platformio.ini
+        echo '  -D LED_TYPES=TYPE_WS2812_RGB                                              ' >>platformio.ini
         echo '  -D DEFAULT_LED_COLOR_ORDER=COL_ORDER_GRB                                  ' >>platformio.ini
         echo '  -D ABL_MILLIAMPS_DEFAULT=0                                                ' >>platformio.ini
         echo '  -D WLED_AP_SSID_UNIQUE                                                    ' >>platformio.ini
