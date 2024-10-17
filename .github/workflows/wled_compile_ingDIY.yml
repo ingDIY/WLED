@@ -97,10 +97,9 @@ jobs:
         echo '  -D I2S_WSPIN=4                                                            ' >>platformio.ini
         echo '  -D MCLK_PIN=-1                                                            ' >>platformio.ini
         echo '  -D USERMOD_FOUR_LINE_DISPLAY                                              ' >>platformio.ini
-        echo '  -D USE_ALT_DISPlAY                                                        ' >>platformio.ini
         echo '  -D FLD_TYPE=SH1106                                                        ' >>platformio.ini
-        echo '  -D HW_PIN_SCL=27                                                          ' >>platformio.ini
-        echo '  -D HW_PIN_SDA=26                                                          ' >>platformio.ini
+        echo '  -D I2CSCLPIN=27                                                           ' >>platformio.ini
+        echo '  -D I2CSDAPIN=26                                                           ' >>platformio.ini
         echo '  -D USERMOD_ROTARY_ENCODER_UI                                              ' >>platformio.ini
         echo '  -D USERMOD_ROTARY_ENCODER_GPIO=INPUT                                      ' >>platformio.ini
         echo '  -D ENCODER_DT_PIN=21                                                      ' >>platformio.ini
