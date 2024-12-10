@@ -212,7 +212,7 @@ CRGBPalette16 &Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {
     case 0: //default palette. Exceptions for specific effects above
       targetPalette = PartyColors_p; break;
     case 1: //randomly generated palette
-      targetPalette = _randomPalette; //random palette is generated at intervals in handleRandomPalette() 
+      targetPalette = _randomPalette; //random palette is generated at intervals in handleRandomPalette()
       break;
     case 2: {//primary color only
       CRGB prim = gamma32(colors[0]);
@@ -430,7 +430,7 @@ void Segment::handleRandomPalette() {
   if ((uint16_t)((uint16_t)(millis() / 1000U) - _lastPaletteChange) > randomPaletteChangeTime){
         _newRandomPalette = useHarmonicRandomPalette ? generateHarmonicRandomPalette(_randomPalette) : generateRandomPalette();
         _lastPaletteChange = (uint16_t)(millis() / 1000U);
-        _lastPaletteBlend = (uint16_t)((uint16_t)millis() - 512); // starts blending immediately   
+        _lastPaletteBlend = (uint16_t)((uint16_t)millis() - 512); // starts blending immediately
   }
 
   // if palette transitions is enabled, blend it according to Transition Time (if longer than minimum given by service calls)
@@ -756,7 +756,7 @@ void IRAM_ATTR_YN Segment::setPixelColor(int i, uint32_t col)
         // Odd rays start further from center if prevRay started at center.
         static int prevRay = INT_MIN; // previous ray number
         if ((i % 2 == 1) && (i - 1 == prevRay || i + 1 == prevRay)) {
-          int jump = min(vW/3, vH/3); // can add 2 if using medium pinwheel 
+          int jump = min(vW/3, vH/3); // can add 2 if using medium pinwheel
           posx += inc_x * jump;
           posy += inc_y * jump;
         }
@@ -1192,7 +1192,7 @@ void WS2812FX::finalizeInit() {
 
     static_assert(validatePinsAndTypes(defDataTypes, defNumTypes, defNumPins),
                   "The default pin list defined in DATA_PINS does not match the pin requirements for the default buses defined in LED_TYPES");
-    
+
     unsigned prevLen = 0;
     unsigned pinsIndex = 0;
     for (unsigned i = 0; i < WLED_MAX_BUSSES+WLED_MIN_VIRTUAL_BUSSES; i++) {
@@ -1203,7 +1203,7 @@ void WS2812FX::finalizeInit() {
 
       // if we need more pins than available all outputs have been configured
       if (pinsIndex + busPins > defNumPins) break;
-      
+
       // Assign all pins first so we can check for conflicts on this bus
       for (unsigned j = 0; j < busPins && j < OUTPUT_MAX_PINS; j++) defPin[j] = defDataPins[pinsIndex + j];
 
