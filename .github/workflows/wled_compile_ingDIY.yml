@@ -59,7 +59,6 @@ jobs:
         cd $GITHUB_WORKSPACE
         WLEDFOLDERNAME=`cat /tmp/WLEDtemp/wledfoldername`
         cp ${WLEDFOLDERNAME}/build_output/release/* $GITHUB_WORKSPACE/_flashing/
-        date '+%Y/%m/%d%t%T' >$GITHUB_WORKSPACE/_flashing/last_build_date.txt
 
     - name: Add files to GIT
       run: |
