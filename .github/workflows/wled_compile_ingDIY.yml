@@ -64,21 +64,18 @@ jobs:
       run: |
         date '+%Y/%m/%d%t%T' >$GITHUB_WORKSPACE/_flashing/last_build_date.txt
 
-    - name: Commit Files
-      if: github.ref_name == 'master'
+    - name: Add files to GIT
       run: |
         cd $GITHUB_WORKSPACE
         git config user.name "GitHub Actions Bot"
         git config user.email "<>"
-        git add $GITHUB_WORKSPACE/_flashing/LEDdrums.bin
-        git add $GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
-        git add $GITHUB_WORKSPACE/_flashing/LEDdrums_last_build_date.txt
-        git add $GITHUB_WORKSPACE/_flashing/LEDremote.bin
-        git add $GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
-        git add $GITHUB_WORKSPACE/_flashing/LEDremote_last_build_date.txt
-        git add $GITHUB_WORKSPACE/_flashing/LEDctrl.bin
-        git add $GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        git add $GITHUB_WORKSPACE/_flashing/LEDctrl_last_build_date.txt
+        git add $GITHUB_WORKSPACE/_flashing/*
+
+    - name: Commit files (only if MASTER branch)
+      if: github.ref_name == 'master'
+      run: |
+        echo "Committing files, workflow triggered on branch: ${{ github.ref_name }}"
+        cd $GITHUB_WORKSPACE
         git commit -m "commit Actions Bot compiled builds"
         git push origin master
         git pull
