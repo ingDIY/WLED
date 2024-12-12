@@ -88,4 +88,5 @@ jobs:
 
     - name: Skip Commit Files
       if: github.ref_name != 'master'
-      run: echo "This step is skipped because the branch is not 'master'. Triggering branch: ${{ github.ref_name }}"
+      run: |
+        echo "This step is skipped because the branch is not 'master'. Triggering branch: ${{ github.ref_name }}"
