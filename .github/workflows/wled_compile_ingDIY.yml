@@ -59,9 +59,6 @@ jobs:
         cd $GITHUB_WORKSPACE
         WLEDFOLDERNAME=`cat /tmp/WLEDtemp/wledfoldername`
         cp ${WLEDFOLDERNAME}/build_output/release/* $GITHUB_WORKSPACE/_flashing/
-
-    - name: Create utility files
-      run: |
         date '+%Y/%m/%d%t%T' >$GITHUB_WORKSPACE/_flashing/last_build_date.txt
 
     - name: Add files to GIT
@@ -71,7 +68,7 @@ jobs:
         git config user.email "<>"
         git add $GITHUB_WORKSPACE/_flashing/*
 
-    - name: Commit files (only if MASTER branch)
+    - name: Commit files (only from MASTER branch)
       if: github.ref_name == 'master'
       run: |
         echo "Committing files, workflow triggered on branch: ${{ github.ref_name }}"
@@ -82,8 +79,3 @@ jobs:
         git checkout develop
         git merge master
         git push origin develop
-
-    - name: Skip Commit Files
-      if: github.ref_name != 'master'
-      run: |
-        echo "This step is skipped because the branch is not 'master'. Triggering branch: ${{ github.ref_name }}"
