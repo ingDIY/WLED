@@ -5,18 +5,23 @@ on:
     push:
       branches:
       - master
+      - release/*
 
 jobs:
   build:
 
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+
+    - name: Display triggering branch
+      run: |
+        echo "Workflow triggered by branch: ${{ github.ref_name }}"
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.9
+        python-version: '3.12'
 
     - name: Install PlatformIO
       run: |
@@ -26,189 +31,47 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
 
-    - name: Run PlatformIO
+    - name: Download WLED Base Repository
       run: |
         rm -rf /tmp/WLEDtemp/* || true
         mkdir -p /tmp/WLEDtemp
         wget https://github.com/Aircoookie/WLED/archive/refs/heads/main.zip -O /tmp/WLEDtemp/mm.zip
         unzip /tmp/WLEDtemp/mm.zip -d /tmp/WLEDtemp
         find /tmp/WLEDtemp -maxdepth 1 -mindepth 1 -name "*" -type d >> /tmp/WLEDtemp/wledfoldername
+
+    - name: Replace PlatformIO Configs
+      run: |
+        cp ./platformio.ini `cat /tmp/WLEDtemp/wledfoldername`
+        cp ./platformio_override.ini `cat /tmp/WLEDtemp/wledfoldername`
+
+    - name: Install Dependencies
+      run: |
         cd `cat /tmp/WLEDtemp/wledfoldername`
         npm install
 
-        echo '# setup for: LED Drums; PCB ver 4.20; variant "LED" ver 4.20                ' >>platformio.ini
-        echo '[env:LEDdrums]                                                              ' >>platformio.ini
-        echo 'extends = env:esp32dev                                                      ' >>platformio.ini
-        echo 'build_flags = ${env:esp32dev.build_flags}                                   ' >>platformio.ini
-        echo '  -D WLED_MAX_BUTTONS=1                                                     ' >>platformio.ini
-        echo '  -D BTNPIN=-1                                                              ' >>platformio.ini
-        echo '  -D LEDPIN=16                                                              ' >>platformio.ini
-        echo '  -D DEFAULT_LED_COUNT=50                                                   ' >>platformio.ini
-        echo '  -D DEFAULT_LED_TYPE=TYPE_WS2812_RGB                                       ' >>platformio.ini
-        echo '  -D DEFAULT_LED_COLOR_ORDER=COL_ORDER_GRB                                  ' >>platformio.ini
-        echo '  -D ABL_MILLIAMPS_DEFAULT=1000                                             ' >>platformio.ini
-        echo '  -D WLED_AP_SSID_UNIQUE                                                    ' >>platformio.ini
-        echo '  -D CLIENT_SSID="\"StefPhone\""                                            ' >>platformio.ini
-        echo '  -D SERVERNAME="\"LEDdrums\""                                              ' >>platformio.ini
-        echo '  -D USERMOD_AUTO_SAVE                                                      ' >>platformio.ini
-        echo '  -D AUTOSAVE_AFTER_SEC=10                                                  ' >>platformio.ini
-        echo '  -D USERMOD_AUTO_SAVE_ON_BOOT=true                                         ' >>platformio.ini
-        echo '  -D USERMOD_AUDIOREACTIVE                                                  ' >>platformio.ini
-        echo '  -D UM_AUDIOREACTIVE_ENABLE                                                ' >>platformio.ini
-        echo '  -D UM_AUDIOREACTIVE_USE_NEW_FFT                                           ' >>platformio.ini
-        echo '  -D SR_DMTYPE=4                        # 4=generic I2S with master clock   ' >>platformio.ini
-        echo '  -D I2S_CKPIN=18                                                           ' >>platformio.ini
-        echo '  -D I2S_SDPIN=5                                                            ' >>platformio.ini
-        echo '  -D I2S_WSPIN=19                                                           ' >>platformio.ini
-        echo '  -D MCLK_PIN=3                                                             ' >>platformio.ini
-        echo '  -D I2S_USE_RIGHT_CHANNEL              # Use RIGHT instead of LEFT channel ' >>platformio.ini
-        echo '  -D SR_SQUELCH=15                                                          ' >>platformio.ini
-        echo '  -D SR_GAIN=30                                                             ' >>platformio.ini
-        echo '  -D WLED_DISABLE_ESPNOW                                                    ' >>platformio.ini
-        echo '  -D WLED_DISABLE_MQTT                                                      ' >>platformio.ini
-        echo '  -D WLED_DISABLE_LOXONE                                                    ' >>platformio.ini
-        echo '  -D WLED_DISABLE_ALEXA                                                     ' >>platformio.ini
-        echo '  -D WLED_DISABLE_HUESYNC                                                   ' >>platformio.ini
-        echo '  -D WLED_DISABLE_WEBSOCKETS                                                ' >>platformio.ini
-        echo '  -D WLED_DISABLE_2D                                                        ' >>platformio.ini
-        echo '  -D WLED_DISABLE_INFRARED                                                  ' >>platformio.ini
-        echo 'lib_deps = ${env:esp32dev.lib_deps}                                         ' >>platformio.ini
-        echo '  https://github.com/kosme/arduinoFFT#419d7b0                               ' >>platformio.ini
-
-        echo '# setup for: LED Drums; PCB ver 2.63; variant "LED Drums" ver 2.60          ' >>platformio.ini
-        echo '[env:LEDremote]                                                             ' >>platformio.ini
-        echo 'extends = env:esp32dev                                                      ' >>platformio.ini
-        echo 'build_flags = ${env:esp32dev.build_flags}                                   ' >>platformio.ini
-        echo '  -D WLED_MAX_BUTTONS=1                                                     ' >>platformio.ini
-        echo '  -D BTNPIN=-1                                                              ' >>platformio.ini
-        echo '  -D DEFAULT_LED_COUNT=0                                                    ' >>platformio.ini
-        echo '  -D DEFAULT_LED_TYPE=TYPE_NONE                                             ' >>platformio.ini
-        echo '  -D WLED_ENABLE_INFRARED                                                   ' >>platformio.ini
-        echo '  -D IRPIN=12                                                               ' >>platformio.ini
-        echo '  -D IRTYPE=4                           # 4= 40-key RGB                     ' >>platformio.ini
-        echo '  -D WLED_AP_SSID_UNIQUE                                                    ' >>platformio.ini
-        echo '  -D SERVERNAME="\"LEDremote\""                                             ' >>platformio.ini
-        echo '  -D USERMOD_AUTO_SAVE                                                      ' >>platformio.ini
-        echo '  -D AUTOSAVE_AFTER_SEC=10                                                  ' >>platformio.ini
-        echo '  -D USERMOD_AUTO_SAVE_ON_BOOT=true                                         ' >>platformio.ini
-        echo '  -D USERMOD_AUDIOREACTIVE                                                  ' >>platformio.ini
-        echo '  -D UM_AUDIOREACTIVE_ENABLE                                                ' >>platformio.ini
-        echo '  -D UM_AUDIOREACTIVE_USE_NEW_FFT                                           ' >>platformio.ini
-        echo '  -D SR_DMTYPE=1                        # 1=generic I2S (default)           ' >>platformio.ini
-        echo '  -D I2S_CKPIN=17                                                           ' >>platformio.ini
-        echo '  -D I2S_SDPIN=16                                                           ' >>platformio.ini
-        echo '  -D I2S_WSPIN=4                                                            ' >>platformio.ini
-        echo '  -D MCLK_PIN=-1                                                            ' >>platformio.ini
-        echo '  -D USERMOD_FOUR_LINE_DISPLAY                                              ' >>platformio.ini
-        echo '  -D USE_ALT_DISPlAY                                                        ' >>platformio.ini
-        echo '  -D FLD_TYPE=SH1106                                                        ' >>platformio.ini
-        echo '  -D HW_PIN_SCL=27                                                          ' >>platformio.ini
-        echo '  -D HW_PIN_SDA=26                                                          ' >>platformio.ini
-        echo '  -D USERMOD_ROTARY_ENCODER_UI                                              ' >>platformio.ini
-        echo '  -D USERMOD_ROTARY_ENCODER_GPIO=INPUT                                      ' >>platformio.ini
-        echo '  -D ENCODER_DT_PIN=21                                                      ' >>platformio.ini
-        echo '  -D ENCODER_CLK_PIN=23                                                     ' >>platformio.ini
-        echo '  -D ENCODER_SW_PIN=0                                                       ' >>platformio.ini
-        echo '  -D WLED_DISABLE_ESPNOW                                                    ' >>platformio.ini
-        echo '  -D WLED_DISABLE_MQTT                                                      ' >>platformio.ini
-        echo '  -D WLED_DISABLE_LOXONE                                                    ' >>platformio.ini
-        echo '  -D WLED_DISABLE_ALEXA                                                     ' >>platformio.ini
-        echo '  -D WLED_DISABLE_HUESYNC                                                   ' >>platformio.ini
-        echo '  -D WLED_DISABLE_WEBSOCKETS                                                ' >>platformio.ini
-        echo '  -D WLED_DISABLE_2D                                                        ' >>platformio.ini
-        echo 'lib_deps = ${env:esp32dev.lib_deps}                                         ' >>platformio.ini
-        echo '  https://github.com/kosme/arduinoFFT#419d7b0                               ' >>platformio.ini
-        echo '  U8g2                                  # For use SSD1306 OLED display      ' >>platformio.ini
-        echo '  Wire                                  # For use SSD1306 OLED display      ' >>platformio.ini
-        echo 'lib_ignore =                                                                ' >>platformio.ini
-        echo '  ESPAsyncTCP                                                               ' >>platformio.ini
-        echo '  ESPAsyncUDP                                                               ' >>platformio.ini
-
-        echo '# setup for: LED CTRL; PCB ver 2.22; variant "SERIAL_12V" ver 2.24          ' >>platformio.ini
-        echo '[env:LEDctrl]                                                               ' >>platformio.ini
-        echo 'extends = env:esp32dev                                                      ' >>platformio.ini
-        echo 'build_flags = ${env:esp32dev.build_flags}                                   ' >>platformio.ini
-        echo '  -D WLED_MAX_BUTTONS=1                                                     ' >>platformio.ini
-        echo '  -D BTNPIN=-1                                                              ' >>platformio.ini
-        echo '  -D LEDPIN=4                                                               ' >>platformio.ini
-        echo '  -D DEFAULT_LED_COUNT=50                                                   ' >>platformio.ini
-        echo '  -D DEFAULT_LED_TYPE=TYPE_WS2812_RGB                                       ' >>platformio.ini
-        echo '  -D DEFAULT_LED_COLOR_ORDER=COL_ORDER_GRB                                  ' >>platformio.ini
-        echo '  -D ABL_MILLIAMPS_DEFAULT=0                                                ' >>platformio.ini
-        echo '  -D WLED_AP_SSID_UNIQUE                                                    ' >>platformio.ini
-        echo '  -D SERVERNAME="\"LEDctrl\""                                               ' >>platformio.ini
-        echo '  -D USERMOD_AUTO_SAVE                                                      ' >>platformio.ini
-        echo '  -D AUTOSAVE_AFTER_SEC=10                                                  ' >>platformio.ini
-        echo '  -D USERMOD_AUTO_SAVE_ON_BOOT=true                                         ' >>platformio.ini
-        echo '  -D WLED_DISABLE_ESPNOW                                                    ' >>platformio.ini
-        echo '  -D WLED_DISABLE_MQTT                                                      ' >>platformio.ini
-        echo '  -D WLED_DISABLE_LOXONE                                                    ' >>platformio.ini
-        echo '  -D WLED_DISABLE_ALEXA                                                     ' >>platformio.ini
-        echo '  -D WLED_DISABLE_HUESYNC                                                   ' >>platformio.ini
-        echo '  -D WLED_DISABLE_WEBSOCKETS                                                ' >>platformio.ini
-        echo '  -D WLED_DISABLE_2D                                                        ' >>platformio.ini
-        echo '  -D WLED_DISABLE_INFRARED                                                  ' >>platformio.ini
-        echo 'lib_deps = ${env:esp32dev.lib_deps}                                         ' >>platformio.ini
-        echo '  https://github.com/kosme/arduinoFFT#419d7b0                               ' >>platformio.ini
-
-        pio run -e LEDdrums || pio run -e LEDdrums
-        pio run -e LEDremote || pio run -e LEDremote
-        pio run -e LEDctrl || pio run -e LEDctrl
+    - name: Build All with PlatformIO
+      run: |
+        cd `cat /tmp/WLEDtemp/wledfoldername`
+        platformio run
 
     - name: Copy Files
       run: |
         cd $GITHUB_WORKSPACE
         WLEDFOLDERNAME=`cat /tmp/WLEDtemp/wledfoldername`
-        cp ${WLEDFOLDERNAME}/build_output/firmware/LEDdrums.bin $GITHUB_WORKSPACE/_flashing/
-        cp ${WLEDFOLDERNAME}/build_output/firmware/LEDremote.bin $GITHUB_WORKSPACE/_flashing/
-        cp ${WLEDFOLDERNAME}/build_output/firmware/LEDctrl.bin $GITHUB_WORKSPACE/_flashing/
+        cp ${WLEDFOLDERNAME}/build_output/release/* $GITHUB_WORKSPACE/_flashing/
 
-    - name: Create utility files
-      run: |
-        echo '@echo off' >$GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
-        echo 'echo Flashing LEDdrums firmware...' >>$GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
-        echo 'esptool.py write_flash 0x10000 ./LEDdrums.bin' >>$GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
-        echo 'echo.' >>$GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
-        echo 'echo Flashing done !!' >>$GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
-        echo 'timeout 5' >>$GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
-        echo 'exit' >>$GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
-
-        date '+%Y/%m/%d%t%T' >$GITHUB_WORKSPACE/_flashing/LEDdrums_last_build_date.txt
-
-        echo '@echo off' >$GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
-        echo 'echo Flashing LEDremote firmware...' >>$GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
-        echo 'esptool.py write_flash 0x10000 ./LEDremote.bin' >>$GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
-        echo 'echo.' >>$GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
-        echo 'echo Flashing done !!' >>$GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
-        echo 'timeout 5' >>$GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
-        echo 'exit' >>$GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
-
-        date '+%Y/%m/%d%t%T' >$GITHUB_WORKSPACE/_flashing/LEDremote_last_build_date.txt
-
-        echo '@echo off' >$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'echo Flashing LEDctrl firmware...' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'esptool.py write_flash 0x10000 ./LEDctrl.bin' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'echo.' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'echo Flashing done !!' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'timeout 5' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        echo 'exit' >>$GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-
-        date '+%Y/%m/%d%t%T' >$GITHUB_WORKSPACE/_flashing/LEDctrl_last_build_date.txt
-
-    - name: Commit Files
+    - name: Add files to GIT
       run: |
         cd $GITHUB_WORKSPACE
         git config user.name "GitHub Actions Bot"
         git config user.email "<>"
-        git add $GITHUB_WORKSPACE/_flashing/LEDdrums.bin
-        git add $GITHUB_WORKSPACE/_flashing/LEDdrums_flash.bat
-        git add $GITHUB_WORKSPACE/_flashing/LEDdrums_last_build_date.txt
-        git add $GITHUB_WORKSPACE/_flashing/LEDremote.bin
-        git add $GITHUB_WORKSPACE/_flashing/LEDremote_flash.bat
-        git add $GITHUB_WORKSPACE/_flashing/LEDremote_last_build_date.txt
-        git add $GITHUB_WORKSPACE/_flashing/LEDctrl.bin
-        git add $GITHUB_WORKSPACE/_flashing/LEDctrl_flash.bat
-        git add $GITHUB_WORKSPACE/_flashing/LEDctrl_last_build_date.txt
+        git add $GITHUB_WORKSPACE/_flashing/*
+
+    - name: Commit files (only from MASTER branch)
+      if: github.ref_name == 'master'
+      run: |
+        echo "Committing files, workflow triggered on branch: ${{ github.ref_name }}"
+        cd $GITHUB_WORKSPACE
         git commit -m "commit Actions Bot compiled builds"
         git push origin master
         git pull
