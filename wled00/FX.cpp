@@ -1809,7 +1809,7 @@ uint16_t mode_oscillate(void) {
     uint32_t color = BLACK;
     for (unsigned j = 0; j < numOscillators; j++) {
       if((int)i >= (int)oscillators[j].pos - oscillators[j].size && i <= oscillators[j].pos + oscillators[j].size) {
-        color = (color == BLACK) ? SEGCOLOR(j) : color_blend(color, SEGCOLOR(j), 128);
+        color = (color == BLACK) ? SEGCOLOR(j) : color_blend(color, SEGCOLOR(j), uint8_t(128));
       }
     }
     SEGMENT.setPixelColor(i, color);
