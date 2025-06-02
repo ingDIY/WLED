@@ -106,7 +106,7 @@
 			<div class="qcs" onclick="pC('#ffa000');" style="background-color:#ffa000;"></div>
 			<div class="qcs" onclick="pC('#ffc800');" style="background-color:#ffc800;"></div>
 			<div class="qcs" onclick="pC('#ffe0a0');" style="background-color:#ffe0a0;"></div>
-			<div class="qcs qcsw" onclick="pC('#ffffff');" style="background-color:#ffffff;"></div>
+			<div class="qcs" onclick="pC('#ffffff');" style="background-color:#ffffff;"></div>
 			<div class="qcs qcsb" onclick="pC('#000000');" style="background-color:#000000;"></div><br>
 			<div class="qcs" onclick="pC('#ff00ff');" style="background-color:#ff00ff;"></div>
 			<div class="qcs" onclick="pC('#0000ff');" style="background-color:#0000ff;"></div>
@@ -128,7 +128,7 @@
 		<div style="padding: 8px 0;" id="btns">
 			<button class="btn btn-xs" title="File editor" type="button" id="edit" onclick="window.location.href=getURL('/edit')"><i class="icons btn-icon">&#xe2c6;</i></button>
 			<button class="btn btn-xs" title="Pixel Magic Tool" type="button" id="pxmb" onclick="window.location.href=getURL('/pxmagic.htm')"><i class="icons btn-icon">&#xe410;</i></button>
-			<button class="btn btn-xs" title="Add custom palette" type="button" onclick="window.location.href=getURL('/cpal.htm')"><i class="icons btn-icon">&#xe18a;</i></button>
+			<button class="btn btn-xs" title="Add custom palette" type="button" id="adPal" onclick="window.location.href=getURL('/cpal.htm')"><i class="icons btn-icon">&#xe18a;</i></button>
 			<button class="btn btn-xs" title="Remove last custom palette" type="button" id="rmPal" onclick="palettesData=null;localStorage.removeItem('wledPalx');requestJson({rmcpal:true});setTimeout(loadPalettes,250,loadPalettesData);"><i class="icons btn-icon">&#xe037;</i></button>
 		</div>
 		<p class="labels hd" id="pall"><i class="icons sel-icon" onclick="tglHex()">&#xe2b3;</i> Color palette</p>

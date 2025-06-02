@@ -1,3 +1,4 @@
+#pragma once
 #ifndef WLED_FCN_DECLARE_H
 #define WLED_FCN_DECLARE_H
 
@@ -78,8 +79,7 @@ class NeoGammaWLEDMethod {
 };
 #define gamma32(c) NeoGammaWLEDMethod::Correct32(c)
 #define gamma8(c)  NeoGammaWLEDMethod::rawGamma8(c)
-[[gnu::hot]] uint32_t color_blend(uint32_t c1, uint32_t c2 , uint8_t blend);
-inline uint32_t color_blend16(uint32_t c1, uint32_t c2, uint16_t b) { return color_blend(c1, c2, b >> 8); };
+[[gnu::hot]] uint32_t color_blend(uint32_t,uint32_t,uint16_t,bool b16=false);
 [[gnu::hot]] uint32_t color_add(uint32_t,uint32_t, bool fast=false);
 [[gnu::hot]] uint32_t color_fade(uint32_t c1, uint8_t amount, bool video=false);
 CRGBPalette16 generateHarmonicRandomPalette(CRGBPalette16 &basepalette);
@@ -231,7 +231,8 @@ void deletePreset(byte index);
 bool getPresetName(byte index, String& name);
 
 //remote.cpp
-void handleRemote(uint8_t *data, size_t len);
+void handleWiZdata(uint8_t *incomingData, size_t len);
+void handleRemote();
 
 //set.cpp
 bool isAsterisksOnly(const char* str, byte maxLen);
