@@ -34,10 +34,12 @@ jobs:
     - name: Download WLED Base Repository
       id: download
       run: |
+        BRANCH=0_15_x
         mkdir -p /tmp/WLEDtemp
-        wget https://github.com/wled/WLED/archive/refs/heads/0_15_x.zip -O /tmp/WLEDtemp/mm.zip
-        unzip /tmp/WLEDtemp/mm.zip -d /tmp/WLEDtemp
-        echo "path=/tmp/WLEDtemp/WLED-0_15_x" >> $GITHUB_OUTPUT
+        wget https://github.com/wled/WLED/archive/refs/heads/$BRANCH.zip -O /tmp/WLEDtemp/repo.zip
+        unzip /tmp/WLEDtemp/repo.zip -d /tmp/WLEDtemp
+        EXTRACTED=$(find /tmp/WLEDtemp -maxdepth 1 -mindepth 1 -type d | grep -i 'WLED')
+        echo "path=$EXTRACTED" >> $GITHUB_OUTPUT
 
     - name: Replace PlatformIO Configs
       run: |
