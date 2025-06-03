@@ -32,39 +32,38 @@ jobs:
       uses: actions/setup-node@v4
 
     - name: Download WLED Base Repository
+      id: download
       run: |
-        rm -rf /tmp/WLEDtemp/* || true
         mkdir -p /tmp/WLEDtemp
         wget https://github.com/wled/WLED/archive/refs/heads/0_15_x.zip -O /tmp/WLEDtemp/mm.zip
         unzip /tmp/WLEDtemp/mm.zip -d /tmp/WLEDtemp
-        find /tmp/WLEDtemp -maxdepth 1 -mindepth 1 -name "*" -type d >> /tmp/WLEDtemp/wledfoldername
+        echo "path=/tmp/WLEDtemp/WLED-0_15_x" >> $GITHUB_OUTPUT
 
     - name: Replace PlatformIO Configs
       run: |
-        cp ./platformio.ini `cat /tmp/WLEDtemp/wledfoldername`
-        cp ./platformio_override.ini `cat /tmp/WLEDtemp/wledfoldername`
+        cp ./platformio.ini ${{ steps.download.outputs.path }}
+        cp ./platformio_override.ini ${{ steps.download.outputs.path }}
 
     - name: Install Dependencies
       run: |
-        cd `cat /tmp/WLEDtemp/wledfoldername`
+        cd ${{ steps.download.outputs.path }}
         npm install
 
     - name: Build All with PlatformIO
       run: |
-        cd `cat /tmp/WLEDtemp/wledfoldername`
+        cd ${{ steps.download.outputs.path }}
         platformio run
 
     - name: Copy Files
       run: |
-        cd $GITHUB_WORKSPACE
-        WLEDFOLDERNAME=`cat /tmp/WLEDtemp/wledfoldername`
-        cp ${WLEDFOLDERNAME}/build_output/release/* $GITHUB_WORKSPACE/_flashing/
+        mkdir -p $GITHUB_WORKSPACE/_flashing
+        cp ${{ steps.download.outputs.path }}/build_output/release/* $GITHUB_WORKSPACE/_flashing/
 
     - name: Add files to GIT
       run: |
         cd $GITHUB_WORKSPACE
         git config user.name "GitHub Actions Bot"
-        git config user.email "<>"
+        git config user.email "<actions_bot@github.com>"
         git add $GITHUB_WORKSPACE/_flashing/*
 
     - name: Commit files (only from MASTER branch)
