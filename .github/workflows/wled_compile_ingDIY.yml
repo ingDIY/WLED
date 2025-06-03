@@ -56,6 +56,25 @@ jobs:
         cd ${{ steps.download.outputs.path }}
         platformio run
 
+
+
+
+
+    - name: Debug - lista directory dopo build
+      run: |
+        echo "Contenuto della cartella build:"
+        find ${{ steps.download.outputs.path }} -type f -name "*.bin" -o -name "*.elf" -o -name "*.hex"
+
+        echo "Contenuto dettagliato:"
+        tree -L 4 ${{ steps.download.outputs.path }} || true
+
+    - name: Controlla tutte le build_output
+      run: |
+        find ${{ steps.download.outputs.path }} -type d -name build_output
+
+
+
+
     - name: Copy Files
       run: |
         mkdir -p $GITHUB_WORKSPACE/_flashing
