@@ -71,11 +71,22 @@ jobs:
     - name: Commit files (only from MASTER branch)
       if: github.ref_name == 'master'
       run: |
-        echo "Committing files, workflow triggered on branch: ${{ github.ref_name }}"
+        # Committing files to MASTER branch...
         cd $GITHUB_WORKSPACE
         git commit -m "commit Actions Bot compiled builds"
         git push origin master
+
+        # getting tag name from the last master branch tag
+        TAG_NAME=$(git describe --tags --abbrev=0)
+        BUILD_TAG="${TAG_NAME}_build"
+        git tag "$BUILD_TAG"
+        git push origin "$BUILD_TAG"
+
+        # Merging into DEVELOP branch...
         git pull
         git checkout develop
         git merge master
         git push origin develop
+
+    - name: Build process successfully completed
+      run: echo "Build process successfully completed"
