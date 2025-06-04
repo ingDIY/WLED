@@ -46,6 +46,16 @@ jobs:
         cp ./platformio.ini ${{ steps.DOWNLOAD.outputs.PATH }}
         cp ./platformio_override.ini ${{ steps.DOWNLOAD.outputs.PATH }}
 
+    - name: test TAG
+      run: |
+        VERSION=$(date +'%Y%m%d-%H%M%S')
+        TAGNAME="master_build_${VERSION}"
+        echo "Creating and pushing tag: $TAGNAME"
+        git tag
+        TAG_NAME=$(git describe --tags --abbrev=0)
+        BUILD_TAG="${TAG_NAME}_build"
+        echo "Creating and pushing tag: $BUILD_TAG"
+
     - name: Install Dependencies
       run: |
         cd ${{ steps.DOWNLOAD.outputs.PATH }}
@@ -67,12 +77,6 @@ jobs:
         git config user.name "GitHub Actions Bot"
         git config user.email "<actions_bot@github.com>"
         git add $GITHUB_WORKSPACE/_flashing/*
-
-    - name: test TAG
-      run: |
-        TAG_NAME=$(git describe --tags --abbrev=0)
-        BUILD_TAG="${TAG_NAME}_build"
-        echo "Creating and pushing tag: $BUILD_TAG"
 
     - name: Commit files (only from MASTER branch)
       if: github.ref_name == 'master'
