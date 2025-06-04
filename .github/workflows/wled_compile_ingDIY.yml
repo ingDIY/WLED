@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Display triggering branch
       run: |
@@ -77,7 +79,6 @@ jobs:
         git push origin master
 
         # getting tag name from the last branch tag
-        git tag
         if git describe --tags --abbrev=0 >/dev/null 2>&1; then
           TAG_NAME=$(git describe --tags --abbrev=0)
           BUILD_TAG="${TAG_NAME}_build"
@@ -85,8 +86,14 @@ jobs:
           TAG_NAME=$(git rev-parse --short HEAD)
           BUILD_TAG="build_${TAG_NAME}"
         fi
-        git tag "$BUILD_TAG"
-        git push origin "$BUILD_TAG"
+
+        # sanity check for duplicated tag name
+        if git rev-parse "$BUILD_TAG" >/dev/null 2>&1; then
+          echo "tag $BUILD_TAG already exist: no tag was created."
+        else
+          git tag "$BUILD_TAG"
+          git push origin "$BUILD_TAG"
+        fi
 
         # Merging into DEVELOP branch...
         git pull
