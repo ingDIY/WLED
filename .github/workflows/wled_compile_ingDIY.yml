@@ -69,6 +69,12 @@ jobs:
         git add $GITHUB_WORKSPACE/_flashing/*
 
     - name: Commit files (only from MASTER branch)
+      run: |
+      TAG_NAME=$(git describe --tags --abbrev=0)
+      BUILD_TAG="${TAG_NAME}_build"
+      echo "Creating and pushing tag: $BUILD_TAG"
+
+
       if: github.ref_name == 'master'
       run: |
         # Committing files to MASTER branch...
