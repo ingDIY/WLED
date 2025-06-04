@@ -48,12 +48,14 @@ jobs:
 
     - name: test TAG
       run: |
-        VERSION=$(date +'%Y%m%d-%H%M%S')
-        TAGNAME="master_build_${VERSION}"
-        echo "Creating and pushing tag: $TAGNAME"
         git tag
-        TAG_NAME=$(git describe --tags --abbrev=0)
-        BUILD_TAG="${TAG_NAME}_build"
+        if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+          TAG_NAME=$(git describe --tags --abbrev=0)
+          BUILD_TAG="${TAG_NAME}_build"
+        else
+          TAG_NAME=$(git rev-parse --short HEAD)
+          BUILD_TAG="build_${TAG_NAME}"
+        fi
         echo "Creating and pushing tag: $BUILD_TAG"
 
     - name: Install Dependencies
