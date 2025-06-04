@@ -68,13 +68,13 @@ jobs:
         git config user.email "<actions_bot@github.com>"
         git add $GITHUB_WORKSPACE/_flashing/*
 
-    - name: Commit files (only from MASTER branch)
+    - name: test TAG
       run: |
         TAG_NAME=$(git describe --tags --abbrev=0)
         BUILD_TAG="${TAG_NAME}_build"
         echo "Creating and pushing tag: $BUILD_TAG"
 
-
+    - name: Commit files (only from MASTER branch)
       if: github.ref_name == 'master'
       run: |
         # Committing files to MASTER branch...
