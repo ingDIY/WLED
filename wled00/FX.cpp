@@ -1918,7 +1918,8 @@ uint16_t mode_colorwaves_pride_base(bool isPride2015) {
     bri8 += (255 - brightdepth);
 
     if (isPride2015) {
-      CRGB newcolor = CHSV(hue8, sat8, bri8);
+      CRGBW newcolor = CRGB(CHSV(hue8, sat8, bri8));
+      newcolor.color32 = gamma32inv(newcolor.color32);
       SEGMENT.blendPixelColor(i, newcolor, 64);
     } else {
       SEGMENT.blendPixelColor(i, SEGMENT.color_from_palette(hue8, false, PALETTE_SOLID_WRAP, 0, bri8), 128);
@@ -7407,7 +7408,7 @@ static const char _data_FX_MODE_2DAKEMI[] PROGMEM = "Akemi@Color speed,Dance;Hea
 
 // Distortion waves - ldirko
 // https://editor.soulmatelights.com/gallery/1089-distorsion-waves
-// adapted for WLED by @blazoncek
+// adapted for WLED by @blazoncek, improvements by @dedehai
 uint16_t mode_2Ddistortionwaves() {
   if (!strip.isMatrix || !SEGMENT.is2D()) return mode_static(); // not a 2D set-up
 
@@ -7416,20 +7417,23 @@ uint16_t mode_2Ddistortionwaves() {
 
   uint8_t speed = SEGMENT.speed/32;
   uint8_t scale = SEGMENT.intensity/32;
-
-  uint8_t  w = 2;
+  if(SEGMENT.check2) scale += 192 / (cols+rows); // zoom out some more. note: not changing scale slider for backwards compatibility
 
   unsigned a  = strip.now/32;
   unsigned a2 = a/2;
   unsigned a3 = a/3;
+  unsigned colsScaled = cols * scale;
+  unsigned rowsScaled = rows * scale;
 
-  unsigned cx =  beatsin8_t(10-speed,0,cols-1)*scale;
-  unsigned cy =  beatsin8_t(12-speed,0,rows-1)*scale;
-  unsigned cx1 = beatsin8_t(13-speed,0,cols-1)*scale;
-  unsigned cy1 = beatsin8_t(15-speed,0,rows-1)*scale;
-  unsigned cx2 = beatsin8_t(17-speed,0,cols-1)*scale;
-  unsigned cy2 = beatsin8_t(14-speed,0,rows-1)*scale;
-  
+  unsigned cx =  beatsin16_t(10-speed,0,colsScaled);
+  unsigned cy =  beatsin16_t(12-speed,0,rowsScaled);
+  unsigned cx1 = beatsin16_t(13-speed,0,colsScaled);
+  unsigned cy1 = beatsin16_t(15-speed,0,rowsScaled);
+  unsigned cx2 = beatsin16_t(17-speed,0,colsScaled);
+  unsigned cy2 = beatsin16_t(14-speed,0,rowsScaled);
+
+  byte rdistort, gdistort, bdistort;
+
   unsigned xoffs = 0;
   for (int x = 0; x < cols; x++) {
     xoffs += scale;
@@ -7438,25 +7442,49 @@ uint16_t mode_2Ddistortionwaves() {
     for (int y = 0; y < rows; y++) {
        yoffs += scale;
 
-      byte rdistort = cos8_t((cos8_t(((x<<3)+a )&255)+cos8_t(((y<<3)-a2)&255)+a3   )&255)>>1; 
-      byte gdistort = cos8_t((cos8_t(((x<<3)-a2)&255)+cos8_t(((y<<3)+a3)&255)+a+32 )&255)>>1; 
-      byte bdistort = cos8_t((cos8_t(((x<<3)+a3)&255)+cos8_t(((y<<3)-a) &255)+a2+64)&255)>>1; 
+      if(SEGMENT.check3) {
+        // alternate mode from original code
+        rdistort = cos8_t (((x+y)*8+a2)&255)>>1;
+        gdistort = cos8_t (((x+y)*8+a3+32)&255)>>1;
+        bdistort = cos8_t (((x+y)*8+a+64)&255)>>1;
+      } else {
+        rdistort = cos8_t((cos8_t(((x<<3)+a )&255)+cos8_t(((y<<3)-a2)&255)+a3   )&255)>>1;
+        gdistort = cos8_t((cos8_t(((x<<3)-a2)&255)+cos8_t(((y<<3)+a3)&255)+a+32 )&255)>>1;
+        bdistort = cos8_t((cos8_t(((x<<3)+a3)&255)+cos8_t(((y<<3)-a) &255)+a2+64)&255)>>1;
+      }
 
-      byte valueR = rdistort+ w*  (a- ( ((xoffs - cx)  * (xoffs - cx)  + (yoffs - cy)  * (yoffs - cy))>>7  ));
-      byte valueG = gdistort+ w*  (a2-( ((xoffs - cx1) * (xoffs - cx1) + (yoffs - cy1) * (yoffs - cy1))>>7 ));
-      byte valueB = bdistort+ w*  (a3-( ((xoffs - cx2) * (xoffs - cx2) + (yoffs - cy2) * (yoffs - cy2))>>7 ));
+      byte valueR = rdistort + ((a- ( ((xoffs - cx)  * (xoffs - cx)  + (yoffs - cy)  * (yoffs - cy))>>7  ))<<1);
+      byte valueG = gdistort + ((a2-( ((xoffs - cx1) * (xoffs - cx1) + (yoffs - cy1) * (yoffs - cy1))>>7 ))<<1);
+      byte valueB = bdistort + ((a3-( ((xoffs - cx2) * (xoffs - cx2) + (yoffs - cy2) * (yoffs - cy2))>>7 ))<<1);
 
       valueR = gamma8(cos8_t(valueR));
       valueG = gamma8(cos8_t(valueG));
       valueB = gamma8(cos8_t(valueB));
 
-      SEGMENT.setPixelColorXY(x, y, RGBW32(valueR, valueG, valueB, 0)); 
+      if(SEGMENT.palette == 0) {
+        // use RGB values (original color mode)
+        SEGMENT.setPixelColorXY(x, y, RGBW32(valueR, valueG, valueB, 0));
+      } else {
+        // use palette
+        uint8_t brightness = (valueR + valueG + valueB) / 3;
+        if(SEGMENT.check1) { // map brightness to palette index
+          SEGMENT.setPixelColorXY(x, y, ColorFromPalette(SEGPALETTE, brightness, 255, LINEARBLEND_NOWRAP));
+        } else {
+          // color mapping: calculate hue from pixel color, map it to palette index
+          CHSV hsvclr = rgb2hsv_approximate(CRGB(valueR>>2, valueG>>2, valueB>>2)); // scale colors down to not saturate for better hue extraction
+          SEGMENT.setPixelColorXY(x, y, ColorFromPalette(SEGPALETTE, hsvclr.h, brightness));
+        }
+      }
     }
   }
 
+  // palette mode and not filling: smear-blur to cover up palette wrapping artefacts
+  if(!SEGMENT.check1 && SEGMENT.palette)
+    SEGMENT.blur(200, true);
+
   return FRAMETIME;
 }
-static const char _data_FX_MODE_2DDISTORTIONWAVES[] PROGMEM = "Distortion Waves@!,Scale;;;2";
+static const char _data_FX_MODE_2DDISTORTIONWAVES[] PROGMEM = "Distortion Waves@!,Scale,,,,Fill,Zoom,Alt;;!;2;pal=0";
 
 
 //Soap
@@ -8007,6 +8035,7 @@ uint16_t mode_particlefire(void) {
   PartSys->updateSystem(); // update system properties (dimensions and data pointers)
   PartSys->setWrapX(SEGMENT.check2);
   PartSys->setMotionBlur(SEGMENT.check1 * 170); // anable/disable motion blur
+  PartSys->setSmearBlur(!SEGMENT.check1 * 60);  // enable smear blur if motion blur is not enabled
 
   uint32_t firespeed = max((uint8_t)100, SEGMENT.speed); //limit speed to 100 minimum, reduce frame rate to make it slower (slower speeds than 100 do not look nice)
   if (SEGMENT.speed < 100) { //slow, limit FPS
@@ -8035,7 +8064,7 @@ uint16_t mode_particlefire(void) {
       PartSys->sources[i].source.ttl = 20 + hw_random16((SEGMENT.custom1 * SEGMENT.custom1) >> 8) / (1 + (firespeed >> 5)); //'hotness' of fire, faster flames reduce the effect or flame height will scale too much with speed
       PartSys->sources[i].maxLife = hw_random16(SEGMENT.virtualHeight() >> 1) + 16; // defines flame height together with the vy speed, vy speed*maxlife/PS_P_RADIUS is the average flame height
       PartSys->sources[i].minLife = PartSys->sources[i].maxLife >> 1;
-      PartSys->sources[i].vx = hw_random16(4) - 2; // emitting speed (sideways)
+      PartSys->sources[i].vx = hw_random16(5) - 2; // emitting speed (sideways)
       PartSys->sources[i].vy = (SEGMENT.virtualHeight() >> 1) + (firespeed >> 4) + (SEGMENT.custom1 >> 4); // emitting speed (upwards)
       PartSys->sources[i].var = 2 + hw_random16(2 + (firespeed >> 4)); // speed variation around vx,vy (+/- var)
     }
@@ -8058,6 +8087,20 @@ uint16_t mode_particlefire(void) {
           int32_t curl = ((int32_t)perlin8(PartSys->particles[i].x, PartSys->particles[i].y, SEGENV.step << 4) - 127);
           PartSys->particles[i].vx += (curl * (firespeed + 10)) >> 9;
         }
+      }
+    }
+  }
+
+  // emit faster sparks at first flame position, amount and speed mostly dependends on intensity
+  if(hw_random8() < 10 + (SEGMENT.intensity >> 2)) {
+    for (i = 0; i < PartSys->usedParticles; i++) {
+      if (PartSys->particles[i].ttl == 0) { // find a dead particle
+        PartSys->particles[i].ttl = hw_random16(SEGMENT.virtualHeight()) + 30;
+        PartSys->particles[i].x = PartSys->sources[0].source.x;
+        PartSys->particles[i].y = PartSys->sources[0].source.y;
+        PartSys->particles[i].vx = PartSys->sources[0].source.vx;
+        PartSys->particles[i].vy = (SEGMENT.virtualHeight() >> 1) + (firespeed >> 4) + ((30 + (SEGMENT.intensity >> 1) + SEGMENT.custom1) >> 4); // emitting speed (upwards)
+        break; // emit only one particle
       }
     }
   }
