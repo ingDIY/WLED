@@ -228,6 +228,7 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_LAKE                    75
 #define FX_MODE_METEOR                  76
 //#define FX_MODE_METEOR_SMOOTH           77  // replaced by Meteor
+#define FX_MODE_COPY                    77
 #define FX_MODE_RAILWAY                 78
 #define FX_MODE_RIPPLE                  79
 #define FX_MODE_TWINKLEFOX              80
@@ -723,6 +724,13 @@ class Segment {
       return 1;
     #endif
     }
+    inline unsigned rawLength() const {   // returns length of used raw pixel buffer (eg. get/setPixelColorRaw())
+    #ifndef WLED_DISABLE_2D
+      if (is2D()) return virtualWidth() * virtualHeight();
+    #endif
+      return virtualLength();    
+    }
+
   #ifndef WLED_DISABLE_2D
     inline bool is2D() const                                                            { return (width()>1 && height()>1); }
     [[gnu::hot]] void setPixelColorXY(int x, int y, uint32_t c) const; // set relative pixel within segment with color
