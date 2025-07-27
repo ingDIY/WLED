@@ -7,7 +7,7 @@
  */
 
 // version code in format yymmddb (b = daily build)
-#define VERSION 2502220
+#define VERSION 2507260
 
 //uncomment this if you have a "my_config.h" file you'd like to use
 //#define WLED_USE_MY_CONFIG
@@ -395,7 +395,7 @@ WLED_GLOBAL bool useGlobalLedBuffer _INIT(false); // double buffering disabled o
 #else
 WLED_GLOBAL bool useGlobalLedBuffer _INIT(true);  // double buffering enabled on ESP32
   #ifndef CONFIG_IDF_TARGET_ESP32C3
-WLED_GLOBAL bool useParallelI2S     _INIT(false); // parallel I2S for ESP32
+WLED_GLOBAL bool useParallelI2S     _INIT(true); // parallel I2S for ESP32
   #endif
 #endif
 #ifdef WLED_USE_IC_CCT
