@@ -201,13 +201,13 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
   }
   #endif
 
-  DEBUG_PRINTF_P(PSTR("Heap before buses: %d\n"), ESP.getFreeHeap());
+  DEBUG_PRINTF_P(PSTR("Heap before buses: %d\n"), getFreeHeapSize());
   JsonArray ins = hw_led["ins"];
   if (!ins.isNull()) {
     int s = 0;  // bus iterator
     for (JsonObject elm : ins) {
       if (s >= WLED_MAX_BUSSES) break; // only counts physical buses
-      uint8_t pins[5] = {255, 255, 255, 255, 255};
+      uint8_t pins[OUTPUT_MAX_PINS] = {255, 255, 255, 255, 255};
       JsonArray pinArr = elm["pin"];
       if (pinArr.size() == 0) continue;
       //pins[0] = pinArr[0];
