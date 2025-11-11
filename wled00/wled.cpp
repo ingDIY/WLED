@@ -1,6 +1,7 @@
 #define WLED_DEFINE_GLOBAL_VARS //only in one source file, wled.cpp!
 #include "wled.h"
 #include "wled_ethernet.h"
+#include "ota_update.h"
 #include <Arduino.h>
 
 #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_DISABLE_BROWNOUT_DET)
@@ -164,9 +165,9 @@ void WLED::loop()
   if (millis() - heapTime > 15000) {
     uint32_t heap = ESP.getFreeHeap();
     if (heap < MIN_HEAP_SIZE && lastHeap < MIN_HEAP_SIZE) {
-      DEBUG_PRINTF_P(PSTR("Heap too low! %u\n"), heap);
-      forceReconnect = true;
+      DEBUG_PRINTF_P(PSTR("Heap too low! %u\n"), heap);      
       strip.resetSegments(); // remove all but one segments from memory
+      if (!Update.isRunning()) forceReconnect = true;
     } else if (heap < MIN_HEAP_SIZE) {
       DEBUG_PRINTLN(F("Heap low, purging segments."));
       strip.purgeSegments();
@@ -403,6 +404,9 @@ void WLED::setup()
     DEBUGFS_PRINTLN(F("FS failed!"));
     errorFlag = ERR_FS_BEGIN;
   }
+
+  handleBootLoop(); // check for bootloop and take action (requires WLED_FS)
+
 #ifdef WLED_ADD_EEPROM_SUPPORT
   else deEEP();
 #else
@@ -418,6 +422,11 @@ void WLED::setup()
   WLED_SET_AP_SSID(); // otherwise it is empty on first boot until config is saved
   multiWiFi.push_back(WiFiConfig(CLIENT_SSID,CLIENT_PASS)); // initialise vector with default WiFi
 
+  if(!verifyConfig()) {
+    if(!restoreConfig()) {
+      resetConfig();
+    }
+  }
   DEBUG_PRINTLN(F("Reading config"));
   bool needsCfgSave = deserializeConfigFromFS();
   DEBUG_PRINTF_P(PSTR("heap %u\n"), ESP.getFreeHeap());
