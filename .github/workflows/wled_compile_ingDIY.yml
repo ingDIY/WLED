@@ -33,35 +33,20 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
 
-    - name: Download WLED Base Repository
-      id: DOWNLOAD
-      run: |
-        BRANCH=0_15_x
-        mkdir -p /tmp/download
-        wget https://github.com/wled/WLED/archive/refs/heads/$BRANCH.zip -O /tmp/download/repo.zip
-        unzip /tmp/download/repo.zip -d /tmp/download
-        mv /tmp/download/WLED-$BRANCH /tmp/WLED
-        echo "PATH=/tmp/WLED" >> $GITHUB_OUTPUT
-
-    - name: Replace PlatformIO Configs
-      run: |
-        cp ./platformio.ini ${{ steps.DOWNLOAD.outputs.PATH }}
-        cp ./platformio_override.ini ${{ steps.DOWNLOAD.outputs.PATH }}
-
     - name: Install Dependencies
       run: |
-        cd ${{ steps.DOWNLOAD.outputs.PATH }}
+        cd $GITHUB_WORKSPACE
         npm install
 
     - name: Build All with PlatformIO
       run: |
-        cd ${{ steps.DOWNLOAD.outputs.PATH }}
+        cd $GITHUB_WORKSPACE
         platformio run
 
     - name: Copy Files
       run: |
         mkdir -p $GITHUB_WORKSPACE/_flashing
-        cp ${{ steps.DOWNLOAD.outputs.PATH }}/build_output/firmware/* $GITHUB_WORKSPACE/_flashing/
+        cp $GITHUB_WORKSPACE/build_output/firmware/* $GITHUB_WORKSPACE/_flashing/
 
     - name: Add files to GIT
       run: |
