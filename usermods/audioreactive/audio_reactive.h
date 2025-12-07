@@ -7,10 +7,6 @@
 #include <driver/i2s.h>
 #include <driver/adc.h>
 
-#ifdef WLED_ENABLE_DMX
-  #error This audio reactive usermod is not compatible with DMX Out.
-#endif
-
 #endif
 
 #if defined(ARDUINO_ARCH_ESP32) && (defined(WLED_DEBUG) || defined(SR_DEBUG))
@@ -1225,7 +1221,6 @@ class AudioReactive : public Usermod {
         #if  !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
         // ADC over I2S is only possible on "classic" ESP32
         case 0:
-        default:
           DEBUGSR_PRINTLN(F("AR: Analog Microphone (left channel only)."));
           audioSource = new I2SAdcSource(SAMPLE_RATE, BLOCK_SIZE);
           delay(100);
@@ -1233,6 +1228,13 @@ class AudioReactive : public Usermod {
           if (audioSource) audioSource->initialize(audioPin);
           break;
         #endif
+
+        case 255: // 255 = -1 = no audio source
+          // falls through to default
+        default:
+          if (audioSource) delete audioSource; audioSource = nullptr;
+          enabled = false;
+        break;
       }
       delay(250); // give microphone enough time to initialise
 
@@ -1319,7 +1321,7 @@ class AudioReactive : public Usermod {
         disableSoundProcessing = true;
       } else {
         #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_DEBUG)
-        if ((disableSoundProcessing == true) && (audioSyncEnabled == 0) && audioSource->isInitialized()) {    // we just switched to "enabled"
+        if ((disableSoundProcessing == true) && (audioSyncEnabled == 0) && audioSource && audioSource->isInitialized()) {    // we just switched to "enabled"
           DEBUG_PRINTLN(F("[AR userLoop]  realtime mode ended - audio processing resumed."));
           DEBUG_PRINTF_P(PSTR("               RealtimeMode = %d; RealtimeOverride = %d\n"), int(realtimeMode), int(realtimeOverride));
         }
@@ -1331,7 +1333,7 @@ class AudioReactive : public Usermod {
       if (audioSyncEnabled & 0x02) disableSoundProcessing = true;   // make sure everything is disabled IF in audio Receive mode
       if (audioSyncEnabled & 0x01) disableSoundProcessing = false;  // keep running audio IF we're in audio Transmit mode
 #ifdef ARDUINO_ARCH_ESP32
-      if (!audioSource->isInitialized()) disableSoundProcessing = true;  // no audio source
+      if (!audioSource || !audioSource->isInitialized()) disableSoundProcessing = true;  // no audio source
 
 
       // Only run the sampling code IF we're not in Receive mode or realtime mode
