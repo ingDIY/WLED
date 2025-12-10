@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Display triggering branch
       run: |
@@ -21,7 +23,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.12'
+        python-version: '3.x'
 
     - name: Install PlatformIO
       run: |
@@ -31,50 +33,58 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
 
-    - name: Download WLED Base Repository
-      run: |
-        rm -rf /tmp/WLEDtemp/* || true
-        mkdir -p /tmp/WLEDtemp
-        wget https://github.com/wled/WLED/archive/refs/heads/main.zip -O /tmp/WLEDtemp/mm.zip
-        unzip /tmp/WLEDtemp/mm.zip -d /tmp/WLEDtemp
-        find /tmp/WLEDtemp -maxdepth 1 -mindepth 1 -name "*" -type d >> /tmp/WLEDtemp/wledfoldername
-
-    - name: Replace PlatformIO Configs
-      run: |
-        cp ./platformio.ini `cat /tmp/WLEDtemp/wledfoldername`
-        cp ./platformio_override.ini `cat /tmp/WLEDtemp/wledfoldername`
-
     - name: Install Dependencies
       run: |
-        cd `cat /tmp/WLEDtemp/wledfoldername`
+        cd $GITHUB_WORKSPACE
         npm install
 
     - name: Build All with PlatformIO
       run: |
-        cd `cat /tmp/WLEDtemp/wledfoldername`
+        cd $GITHUB_WORKSPACE
         platformio run
 
     - name: Copy Files
       run: |
-        cd $GITHUB_WORKSPACE
-        WLEDFOLDERNAME=`cat /tmp/WLEDtemp/wledfoldername`
-        cp ${WLEDFOLDERNAME}/build_output/release/* $GITHUB_WORKSPACE/_flashing/
+        mkdir -p $GITHUB_WORKSPACE/_flashing
+        cp $GITHUB_WORKSPACE/build_output/firmware/* $GITHUB_WORKSPACE/_flashing/
 
     - name: Add files to GIT
       run: |
         cd $GITHUB_WORKSPACE
-        git config user.name "GitHub Actions Bot"
-        git config user.email "<>"
+        git config user.name "github-actions[bot]"
+        git config user.email "<github-actions[bot]@users.noreply.github.com>"
         git add $GITHUB_WORKSPACE/_flashing/*
 
     - name: Commit files (only from MASTER branch)
       if: github.ref_name == 'master'
       run: |
-        echo "Committing files, workflow triggered on branch: ${{ github.ref_name }}"
+        # Committing files to MASTER branch...
         cd $GITHUB_WORKSPACE
         git commit -m "commit Actions Bot compiled builds"
         git push origin master
+
+        # getting tag name from the last branch tag
+        if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+          TAG_NAME=$(git describe --tags --abbrev=0)
+          BUILD_TAG="${TAG_NAME}_build"
+        else
+          TAG_NAME=$(git rev-parse --short HEAD)
+          BUILD_TAG="build_${TAG_NAME}"
+        fi
+
+        # sanity check for duplicated tag name
+        if git rev-parse "$BUILD_TAG" >/dev/null 2>&1; then
+          echo "tag $BUILD_TAG already exist: no tag was created."
+        else
+          git tag "$BUILD_TAG"
+          git push origin "$BUILD_TAG"
+        fi
+
+        # Merging into DEVELOP branch...
         git pull
         git checkout develop
         git merge master
         git push origin develop
+
+    - name: Build process successfully completed
+      run: echo "Build process successfully completed"
