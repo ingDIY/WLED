@@ -391,8 +391,9 @@ size_t printSetFormValue(Print& settingsScript, const char* key, int val);
 size_t printSetFormValue(Print& settingsScript, const char* key, const char* val);
 size_t printSetFormIndex(Print& settingsScript, const char* key, int index);
 size_t printSetClassElementHTML(Print& settingsScript, const char* key, const int index, const char* val);
-void prepareHostname(char* hostname);
-bool isAsterisksOnly(const char* str, byte maxLen);
+void getWLEDhostname(char* hostname, size_t maxLen, bool preferMDNS=false); // maxLen = hostname buffer size including \0; if preferMDNSname=true, use mdns name (sanitized)
+void prepareHostname(char* hostname, size_t maxLen);                        // legacy function - not recommended for new code
+[[gnu::pure]] bool isAsterisksOnly(const char* str, byte maxLen);
 bool requestJSONBufferLock(uint8_t module=255);
 void releaseJSONBufferLock();
 uint8_t extractModeName(uint8_t mode, const char *src, char *dest, uint8_t maxLen);
@@ -409,6 +410,14 @@ um_data_t* simulateSound(uint8_t simulationId);
 void enumerateLedmaps();
 uint8_t get_random_wheel_index(uint8_t pos);
 float mapf(float x, float in_min, float in_max, float out_min, float out_max);
+
+#ifndef ESP8266
+inline size_t getFreeHeapSize() { return heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns free heap (ESP.getFreeHeap() can include other memory types)
+inline size_t getContiguousFreeHeap() { return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); } // returns largest contiguous free block
+#else
+inline size_t getFreeHeapSize() { return ESP.getFreeHeap(); } // returns free heap
+inline size_t getContiguousFreeHeap() { return ESP.getMaxFreeBlockSize(); } // returns largest contiguous free block
+#endif
 
 void handleBootLoop();   // detect and handle bootloops
 #ifndef ESP8266

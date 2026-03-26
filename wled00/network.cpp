@@ -144,7 +144,17 @@ const ethernet_settings ethernetBoards[] = {
     18,			              // eth_mdio,
     ETH_PHY_LAN8720,      // eth_type,
     ETH_CLOCK_GPIO0_OUT	// eth_clk_mode
-  }
+  },
+
+ // Gledopto Series With Ethernet
+ {
+    1,                    // eth_address, 
+    5,                    // eth_power, 
+    23,                   // eth_mdc, 
+    33,                   // eth_mdio, 
+    ETH_PHY_LAN8720,      // eth_type,
+    ETH_CLOCK_GPIO0_IN	 // eth_clk_mode
+  },
 };
 #endif
 
@@ -189,9 +199,8 @@ void WiFiEvent(WiFiEvent_t event)
       } else {
         ETH.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
       }
-      // convert the "serverDescription" into a valid DNS hostname (alphanumeric)
-      char hostname[64];
-      prepareHostname(hostname);
+      char hostname[64] = {'\0'}; // any "hostname" within a Fully Qualified Domain Name (FQDN) must not exceed 63 characters
+      getWLEDhostname(hostname, sizeof(hostname), false); // create DNS name based on standard WLED server name
       ETH.setHostname(hostname);
       showWelcomePage = false;
       break;
