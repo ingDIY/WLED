@@ -367,7 +367,8 @@
 #define BTN_TYPE_TOUCH_SWITCH     9
 
 //Ethernet board types
-#define WLED_NUM_ETH_TYPES        13
+#define WLED_NUM_ETH_TYPES        14
+
 
 #define WLED_ETH_NONE              0
 #define WLED_ETH_WT32_ETH01        1
@@ -382,6 +383,7 @@
 #define WLED_ETH_SERG74           10
 #define WLED_ETH_ESP32_POE_WROVER 11
 #define WLED_ETH_LILYGO_T_POE_PRO 12
+#define WLED_ETH_GLEDOPTO         13
 
 //Hue error codes
 #define HUE_ERROR_INACTIVE        0
@@ -580,7 +582,12 @@
     #define DEFAULT_LED_PIN 2    // GPIO2 (D4) on Wemos D1 mini compatible boards, safe to use on any board
   #endif
 #else
-  #define DEFAULT_LED_PIN 16   // aligns with GPIO2 (D4) on Wemos D1 mini32 compatible boards (if it is unusable it will be reassigned in WS2812FX::finalizeInit())
+  #if defined(WLED_USE_ETHERNET)
+    #define DEFAULT_LED_PIN 4    // GPIO4 seems to be a "safe bet" for all known ethernet boards (issue #5155)
+    //#warning "Compiling with Ethernet support. The default LED pin has been changed to pin 4."
+  #else
+    #define DEFAULT_LED_PIN 16   // aligns with GPIO2 (D4) on Wemos D1 mini32 compatible boards (if it is unusable it will be reassigned in WS2812FX::finalizeInit())
+  #endif
 #endif
 #define DEFAULT_LED_TYPE TYPE_WS2812_RGB
 #define DEFAULT_LED_COUNT 30
