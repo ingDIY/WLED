@@ -68,6 +68,9 @@ void WLED::loop()
   #ifdef WLED_ENABLE_DMX
   handleDMX();
   #endif
+  #ifdef WLED_ENABLE_DMX_INPUT
+  dmxInput.update();
+  #endif
 
   #ifdef WLED_DEBUG
   unsigned long usermodMillis = millis();
@@ -163,6 +166,11 @@ void WLED::loop()
 
   // reconnect WiFi to clear stale allocations if heap gets too low
   if (millis() - heapTime > 15000) {
+    #if defined(WLED_USE_SHARED_RMT) || defined(__riscv) || !defined(ARDUINO_ARCH_ESP32)
+    // calling ESP.getFreeHeap() during led update causes glitches on C3 and possibly on 8266, too
+    strip.waitForLEDs(15); // wait up to 15ms for LEDs sendout to complete - we are in the main loop, so a new strip.show() cannot start while waiting
+    #endif
+
     uint32_t heap = ESP.getFreeHeap();
     if (heap < MIN_HEAP_SIZE && lastHeap < MIN_HEAP_SIZE) {
       DEBUG_PRINTF_P(PSTR("Heap too low! %u\n"), heap);      
@@ -216,6 +224,17 @@ void WLED::loop()
     lastWDTFeed = millis();
   }
 #endif
+
+if (doSerializeConfig)
+  {
+    #ifdef WLED_ENABLE_DMX_INPUT
+    dmxInput.disable();
+    #endif
+
+    #ifdef WLED_ENABLE_DMX_INPUT
+    dmxInput.enable();
+    #endif
+  } 
 
   if (doReboot && (!doInitBusses || !doSerializeConfig)) // if busses have to be inited & saved, wait until next iteration
     reset();
@@ -508,6 +527,10 @@ void WLED::setup()
 #endif
 #ifdef WLED_ENABLE_DMX
   initDMX();
+#endif
+#ifdef WLED_ENABLE_DMX_INPUT
+  const uint8_t dmxInputPortNumber = 2; //TODO turn into config variable?!
+  dmxInput.init(dmxInputReceivePin, dmxInputTransmitPin, dmxInputEnablePin, dmxInputPortNumber);
 #endif
 
 #ifdef WLED_ENABLE_ADALIGHT
