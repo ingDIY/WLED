@@ -68,6 +68,9 @@ void WLED::loop()
   #ifdef WLED_ENABLE_DMX
   handleDMX();
   #endif
+  #ifdef WLED_ENABLE_DMX_INPUT
+  dmxInput.update();
+  #endif
 
   #ifdef WLED_DEBUG
   unsigned long usermodMillis = millis();
@@ -221,6 +224,17 @@ void WLED::loop()
     lastWDTFeed = millis();
   }
 #endif
+
+if (doSerializeConfig)
+  {
+    #ifdef WLED_ENABLE_DMX_INPUT
+    dmxInput.disable();
+    #endif
+
+    #ifdef WLED_ENABLE_DMX_INPUT
+    dmxInput.enable();
+    #endif
+  } 
 
   if (doReboot && (!doInitBusses || !doSerializeConfig)) // if busses have to be inited & saved, wait until next iteration
     reset();
@@ -513,6 +527,10 @@ void WLED::setup()
 #endif
 #ifdef WLED_ENABLE_DMX
   initDMX();
+#endif
+#ifdef WLED_ENABLE_DMX_INPUT
+  const uint8_t dmxInputPortNumber = 2; //TODO turn into config variable?!
+  dmxInput.init(dmxInputReceivePin, dmxInputTransmitPin, dmxInputEnablePin, dmxInputPortNumber);
 #endif
 
 #ifdef WLED_ENABLE_ADALIGHT
