@@ -55,11 +55,15 @@ inline uint32_t djb2_hash_runtime(const char* str) {
 // Structure instantiation for this build 
 const wled_metadata_t __attribute__((section(BUILD_METADATA_SECTION))) WLED_BUILD_DESCRIPTION = {
     WLED_CUSTOM_DESC_MAGIC,                   // magic
-    WLED_CUSTOM_DESC_VERSION,                 // version 
+    /*WLED_CUSTOM_DESC_VERSION*/ 1,           // structure version.  Currently set to 1 to allow OTA from broken original version. FIXME before 0.16 release.
     TOSTRING(WLED_VERSION),
     WLED_RELEASE_NAME,                        // release_name
     std::integral_constant<uint32_t, djb2_hash_constexpr(WLED_RELEASE_NAME)>::value, // hash - computed at compile time; integral_constant enforces this
-    { 0, 0, 0 },  // All other platforms can update safely
+#if defined(ESP32) && defined(CONFIG_IDF_TARGET_ESP32)
+    { 0, 15, 3 },  // Some older ESP32 might have bootloader issues; assume we'll have it sorted by 0.15.3
+#else    
+    { 0, 15, 2 },  // All other platforms can update safely
+#endif
 };
 
 static const char repoString_s[] PROGMEM = WLED_REPO;

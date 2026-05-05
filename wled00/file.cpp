@@ -34,24 +34,13 @@ static File f; // don't export to other cpp files
 
 //wrapper to find out how long closing takes
 void closeFile() {
-  if (!doCloseFile || !f) { doCloseFile = false; return; }  // file not open, or no request to close -> nothing to do, nothing to wait
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINT(F("Close -> "));
     uint32_t s = millis();
   #endif
-  doCloseFile = false; // consume flag early, to reduce the time window for concurrent closing attempts from several tasks.
-
-  // f.close() may enter flash critical sections (interrupts/cache paused), so we wait for LED transmission to finish first to avoid WS281x glitches
-  // This is most relevant on ESP32-C3/C5/C6, where the RMT driver is very sensitive to interrupt timing.
-  bool haveSuspended = false;
-  #if defined(WLED_USE_SHARED_RMT) || defined(__riscv) || !defined(ARDUINO_ARCH_ESP32)
-    if (!strip.isSuspended()) { strip.suspend(); haveSuspended = true; }// prevent that a new strip.show() starts after waiting
-    strip.waitForLEDs(15); // be nice, but not too nice. Waits up to 15ms
-  #endif
-
   f.close(); // "if (f)" check is aleady done inside f.close(), and f cannot be nullptr -> no need for double checking before closing the file handle.
-  if (haveSuspended) strip.resume();  // end of critical section - new LEDs updates are allowed again
-  DEBUGFS_PRINTF("took %d ms\n", millis() - s);
+  DEBUGFS_PRINTF("took %lu ms\n", millis() - s);
+  doCloseFile = false;
 }
 
 //find() that reads and buffers data from file stream in 256-byte blocks.
@@ -80,14 +69,14 @@ static bool bufferedFind(const char *target, bool fromStart = true) {
       if(buf[count] == target[index]) {
         if(++index >= targetLen) { // return true if all chars in the target match
           f.seek((f.position() - bufsize) + count +1);
-          DEBUGFS_PRINTF("Found at pos %d, took %d ms", f.position(), millis() - s);
+          DEBUGFS_PRINTF("Found at pos %d, took %lu ms", f.position(), millis() - s);
           return true;
         }
       }
       count++;
     }
   }
-  DEBUGFS_PRINTF("No match, took %d ms\n", millis() - s);
+  DEBUGFS_PRINTF("No match, took %lu ms\n", millis() - s);
   return false;
 }
 
@@ -122,7 +111,7 @@ static bool bufferedFindSpace(size_t targetLen, bool fromStart = true) {
             f.seek((f.position() - bufsize) + count +1 - targetLen);
             knownLargestSpace = MAX_SPACE; //there may be larger spaces after, so we don't know
           }
-          DEBUGFS_PRINTF("Found at pos %d, took %d ms", f.position(), millis() - s);
+          DEBUGFS_PRINTF("Found at pos %d, took %lu ms", f.position(), millis() - s);
           return true;
         }
       } else {
@@ -136,7 +125,7 @@ static bool bufferedFindSpace(size_t targetLen, bool fromStart = true) {
       count++;
     }
   }
-  DEBUGFS_PRINTF("No match, took %d ms\n", millis() - s);
+  DEBUGFS_PRINTF("No match, took %lu ms\n", millis() - s);
   return false;
 }
 
@@ -162,13 +151,13 @@ static bool bufferedFindObjectEnd() {
       if (buf[count] == '}') objDepth--;
       if (objDepth == 0) {
         f.seek((f.position() - bufsize) + count +1);
-        DEBUGFS_PRINTF("} at pos %d, took %d ms", f.position(), millis() - s);
+        DEBUGFS_PRINTF("} at pos %d, took %lu ms", f.position(), millis() - s);
         return true;
       }
       count++;
     }
   }
-  DEBUGFS_PRINTF("No match, took %d ms\n", millis() - s);
+  DEBUGFS_PRINTF("No match, took %lu ms\n", millis() - s);
   return false;
 }
 
@@ -187,7 +176,7 @@ static void writeSpace(size_t l)
   if (knownLargestSpace < l) knownLargestSpace = l;
 }
 
-bool appendObjectToFile(const char* key, JsonDocument* content, uint32_t s, uint32_t contentLen = 0)
+static bool appendObjectToFile(const char* key, const JsonDocument* content, uint32_t s, uint32_t contentLen = 0)
 {
   #ifdef WLED_DEBUG_FS
     DEBUGFS_PRINTLN(F("Append"));
@@ -214,7 +203,7 @@ bool appendObjectToFile(const char* key, JsonDocument* content, uint32_t s, uint
     if (f.position() > 2) f.write(','); //add comma if not first object
     f.print(key);
     serializeJson(*content, f);
-    DEBUGFS_PRINTF("Inserted, took %d ms (total %d)", millis() - s1, millis() - s);
+    DEBUGFS_PRINTF("Inserted, took %lu ms (total %lu)", millis() - s1, millis() - s);
     doCloseFile = true;
     return true;
   }
@@ -262,18 +251,18 @@ bool appendObjectToFile(const char* key, JsonDocument* content, uint32_t s, uint
   f.write('}');
 
   doCloseFile = true;
-  DEBUGFS_PRINTF("Appended, took %d ms (total %d)", millis() - s1, millis() - s);
+  DEBUGFS_PRINTF("Appended, took %lu ms (total %lu)", millis() - s1, millis() - s);
   return true;
 }
 
-bool writeObjectToFileUsingId(const char* file, uint16_t id, JsonDocument* content)
+bool writeObjectToFileUsingId(const char* file, uint16_t id, const JsonDocument* content)
 {
   char objKey[10];
   sprintf(objKey, "\"%d\":", id);
   return writeObjectToFile(file, objKey, content);
 }
 
-bool writeObjectToFile(const char* file, const char* key, JsonDocument* content)
+bool writeObjectToFile(const char* file, const char* key, const JsonDocument* content)
 {
   uint32_t s = 0; //timing
   #ifdef WLED_DEBUG_FS
@@ -334,19 +323,19 @@ bool writeObjectToFile(const char* file, const char* key, JsonDocument* content)
   }
 
   doCloseFile = true;
-  DEBUGFS_PRINTF("Replaced/deleted, took %d ms\n", millis() - s);
+  DEBUGFS_PRINTF("Replaced/deleted, took %lu ms\n", millis() - s);
   return true;
 }
 
-bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest)
+bool readObjectFromFileUsingId(const char* file, uint16_t id, JsonDocument* dest, const JsonDocument* filter)
 {
   char objKey[10];
   sprintf(objKey, "\"%d\":", id);
-  return readObjectFromFile(file, objKey, dest);
+  return readObjectFromFile(file, objKey, dest, filter);
 }
 
 //if the key is a nullptr, deserialize entire object
-bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest)
+bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest, const JsonDocument* filter)
 {
   if (doCloseFile) closeFile();
   #ifdef WLED_DEBUG_FS
@@ -365,10 +354,11 @@ bool readObjectFromFile(const char* file, const char* key, JsonDocument* dest)
     return false;
   }
 
-  deserializeJson(*dest, f);
+  if (filter) deserializeJson(*dest, f, DeserializationOption::Filter(*filter));
+  else        deserializeJson(*dest, f);
 
   f.close();
-  DEBUGFS_PRINTF("Read, took %d ms\n", millis() - s);
+  DEBUGFS_PRINTF("Read, took %lu ms\n", millis() - s);
   return true;
 }
 
@@ -404,8 +394,9 @@ static const uint8_t *getPresetCache(size_t &size) {
 
   if ((presetsModifiedTime != presetsCachedTime) || (presetsCachedValidate != cacheInvalidate)) {
     if (presetsCached) {
-      free(presetsCached);
+      p_free(presetsCached);
       presetsCached = nullptr;
+      presetsCachedSize = 0;
     }
   }
 
@@ -415,7 +406,7 @@ static const uint8_t *getPresetCache(size_t &size) {
       presetsCachedTime = presetsModifiedTime;
       presetsCachedValidate = cacheInvalidate;
       presetsCachedSize = 0;
-      presetsCached = (uint8_t*)ps_malloc(file.size() + 1);
+      presetsCached = (uint8_t*)p_malloc(file.size() + 1);
       if (presetsCached) {
         presetsCachedSize = file.size();
         file.read(presetsCached, presetsCachedSize);
@@ -431,11 +422,11 @@ static const uint8_t *getPresetCache(size_t &size) {
 #endif
 
 bool handleFileRead(AsyncWebServerRequest* request, String path){
-  DEBUG_PRINT(F("WS FileRead: ")); DEBUG_PRINTLN(path);
+  DEBUGFS_PRINT(F("WS FileRead: ")); DEBUGFS_PRINTLN(path);
   if(path.endsWith("/")) path += "index.htm";
   if(path.indexOf(F("sec")) > -1) return false;
-  #ifdef ARDUINO_ARCH_ESP32
-  if (psramSafe && psramFound() && path.endsWith(FPSTR(getPresetsFileName()))) {
+  #ifdef BOARD_HAS_PSRAM
+  if (path.endsWith(FPSTR(getPresetsFileName()))) {
     size_t psize;
     const uint8_t *presets = getPresetCache(psize);
     if (presets) {
@@ -446,9 +437,6 @@ bool handleFileRead(AsyncWebServerRequest* request, String path){
   }
   #endif
   if(WLED_FS.exists(path) || WLED_FS.exists(path + ".gz")) {
-    #if defined(WLED_USE_SHARED_RMT) || defined(__riscv) || !defined(ARDUINO_ARCH_ESP32)
-      strip.waitForLEDs(25); // wait for LEDs before file access (not using strip.suspend(), to avoid effect stuttering)
-    #endif
     request->send(request->beginResponse(WLED_FS, path, {}, request->hasArg(F("download")), {}));
     return true;
   }
@@ -463,9 +451,6 @@ bool copyFile(const char* src_path, const char* dst_path) {
    return false;
   }
 
-  #if defined(WLED_USE_SHARED_RMT) || defined(__riscv) || !defined(ARDUINO_ARCH_ESP32)
-    strip.waitForLEDs(25); // wait for LEDs before file access (not using strip.suspend(), to avoid effect stuttering)
-  #endif
   bool success = true; // is set to false on error
   File src = WLED_FS.open(src_path, "r");
   File dst = WLED_FS.open(dst_path, "w");
@@ -504,9 +489,6 @@ bool compareFiles(const char* path1, const char* path2) {
     return false;
   }
 
-  #if defined(WLED_USE_SHARED_RMT) || defined(__riscv) || !defined(ARDUINO_ARCH_ESP32)
-    strip.waitForLEDs(25); // wait for LEDs before file access (not using strip.suspend(), to avoid effect stuttering)
-  #endif
   bool identical = true; // set to false on mismatch
   File f1 = WLED_FS.open(path1, "r");
   File f2 = WLED_FS.open(path2, "r");
@@ -576,6 +558,12 @@ bool restoreFile(const char* filename) {
   }
   DEBUG_PRINTLN(F("restore failed"));
   return false;
+}
+
+bool checkBackupExists(const char* filename) {
+  char backupname[32];
+  snprintf_P(backupname, sizeof(backupname), s_backup_fmt, filename + 1); // skip leading '/' in filename
+  return WLED_FS.exists(backupname);
 }
 
 bool validateJsonFile(const char* filename) {
