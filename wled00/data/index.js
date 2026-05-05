@@ -8,6 +8,7 @@ var segLmax = 0; // size (in pixels) of largest selected segment
 var selectedFx = 0;
 var selectedPal = 0;
 var csel = 0; // selected color slot (0-2)
+var cpick; // iro color picker
 var currentPreset = -1;
 var lastUpdate = 0;
 var segCount = 0, ledCount = 0, lowestUnused = 0, maxSeg = 0, lSeg = 0;
@@ -16,15 +17,15 @@ var simplifiedUI = false;
 var tr = 7;
 var d = document;
 const ranges = RangeTouch.setup('input[type="range"]', {});
-var retry = false;
 var palettesData;
 var fxdata = [];
 var pJson = {}, eJson = {}, lJson = {};
 var plJson = {}; // array of playlists
 var pN = "", pI = 0, pNum = 0;
-var pmt = 1, pmtLS = 0, pmtLast = 0;
+var pmt = 1, pmtLS = 0;
 var lastinfo = {};
 var isM = false, mw = 0, mh=0;
+var bsOpts = null; // blending style options snapshot, used for dynamic filtering based on matrix mode (iOS compatibility)
 var ws, wsRpt=0;
 var cfg = {
 	theme:{base:"dark", bg:{url:"", rnd: false, rndGrayscale: false, rndBlur: false}, alpha:{bg:0.6,tab:0.8}, color:{bg:""}},
@@ -35,29 +36,38 @@ var cfg = {
 // [year, month (0 -> January, 11 -> December), day, duration in days, image url]
 var hol = [
 	[0, 11, 24, 4, "https://aircoookie.github.io/xmas.png"],		// christmas
-	[0, 2, 17, 1, "https://images.alphacoders.com/491/491123.jpg"], // st. Patrick's day
-	[2025, 3, 20, 2, "https://aircoookie.github.io/easter.png"],	// easter 2025
-	[2024, 2, 31, 2, "https://aircoookie.github.io/easter.png"],	// easter 2024
+	[0, 2, 17, 1, "https://images.alphacoders.com/491/491123.jpg"],	// st. Patrick's day
+	[2026, 3, 5, 2, "https://aircoookie.github.io/easter.png"],		// easter 2026
+	[2027, 2, 28, 2, "https://aircoookie.github.io/easter.png"],	// easter 2027
+	//[2028, 3, 16, 2, "https://aircoookie.github.io/easter.png"],	// easter 2028
 	[0, 6, 4, 1, "https://images.alphacoders.com/516/516792.jpg"],	// 4th of July
 	[0, 0, 1, 1, "https://images.alphacoders.com/119/1198800.jpg"]	// new year
 ];
 
-var cpick = new iro.ColorPicker("#picker", {
-	width: 260,
-	wheelLightness: false,
-	wheelAngle: 270,
-	wheelDirection: "clockwise",
-	layout: [{
-		component: iro.ui.Wheel,
-		options: {}
-	}]
-});
+// load iro.js sequentially to avoid 503 errors, retries until successful
+(function loadIro() {
+	const l = d.createElement('script');
+	l.src = 'iro.js';
+	l.onload = () => {
+		cpick = new iro.ColorPicker("#picker", {
+			width: 260,
+			wheelLightness: false,
+			wheelAngle: 270,
+			wheelDirection: "clockwise",
+			layout: [{component: iro.ui.Wheel, options: {}}]
+		});
+		d.readyState === 'complete' ? onLoad() : window.addEventListener('load', onLoad);
+	};
+	l.onerror = () => setTimeout(loadIro, 100);
+	document.head.appendChild(l);
+})();
+
 
 function handleVisibilityChange() {if (!d.hidden && new Date () - lastUpdate > 3000) requestJson();}
 function sCol(na, col) {d.documentElement.style.setProperty(na, col);}
 function gId(c) {return d.getElementById(c);}
 function gEBCN(c) {return d.getElementsByClassName(c);}
-function isEmpty(o) {return Object.keys(o).length === 0;}
+function isEmpty(o) {for (const i in o) return false; return true;}
 function isObj(i) {return (i && typeof i === 'object' && !Array.isArray(i));}
 function isNumeric(n) {return !isNaN(parseFloat(n)) && isFinite(n);}
 
@@ -199,19 +209,17 @@ function loadBg() {
 	});
 }
 
-function loadSkinCSS(cId)
-{
-	if (!gId(cId))	// check if element exists
-	{
-		var h  = d.getElementsByTagName('head')[0];
-		var l  = d.createElement('link');
-		l.id   = cId;
-		l.rel  = 'stylesheet';
-		l.type = 'text/css';
+function loadSkinCSS(cId) {
+	return new Promise((resolve, reject) => {
+		if (gId(cId)) return resolve();
+		const l = d.createElement('link');
+		l.id = cId;
+		l.rel = 'stylesheet';
 		l.href = getURL('/skin.css');
-		l.media = 'all';
-		h.appendChild(l);
-	}
+		l.onload = resolve;
+		l.onerror = reject;
+		d.head.appendChild(l);
+	});
 }
 
 function getURL(path) {
@@ -277,19 +285,23 @@ function onLoad()
 	cpick.on("color:change", () => {updatePSliders()});
 	pmtLS = localStorage.getItem('wledPmt');
 
-	// Load initial data
-	loadPalettes(()=>{
-		// fill effect extra data array
-		loadFXData(()=>{
-			// load and populate effects
-			setTimeout(()=>{loadFX(()=>{
-				loadPalettesData(()=>{
-					requestJson();// will load presets and create WS
-					if (cfg.comp.css) setTimeout(()=>{loadSkinCSS('skinCss')},50);
-				});
-			})},50);
-		});
-	});
+	// Load initial data sequentially, no parallel requests to avoid "503" errors when heap is low (slower but much more reliable)
+	(async ()=>{
+		try {
+			await loadPalettes();        // loads base palettes and builds #pallist (safe first)
+			await loadFXData();          // loads fx data
+			await loadFX();              // populates effect list
+			await requestJson();         // updates info variables
+			await loadPalettesData();    // fills palettesData[] for previews
+			populatePalettes();          // repopulate with custom palettes now that cpalcount is known
+			if(pmt == pmtLS) populatePresets(true); // load presets from localStorage if signature matches (i.e. no device reboot)
+			else await loadPresets();    // load and populate presets
+			if (cfg.comp.css) await loadSkinCSS('skinCss');
+			if (!ws) makeWS();
+		} catch(e) {
+			showToast("Init failed: " + e, true);
+		}
+	})();
 	resetUtil();
 
 	d.addEventListener("visibilitychange", handleVisibilityChange, false);
@@ -299,6 +311,21 @@ function onLoad()
 		sl.addEventListener('touchstart', toggleBubble);
 		sl.addEventListener('touchend', toggleBubble);
 	});
+	// limiter for all number inputs except segment inputs: limit inputs instantly  note: segment inputs are special if matrix is enabled, they allow for trailing strips, need a lot of special cases to handle that
+	d.addEventListener("input", function(e) {
+		const t = e.target;
+		if (t.tagName === "INPUT" && t.type === "number" && !(t.id && t.id.startsWith("seg"))) {
+			let val = parseFloat(t.value);
+			const max = parseFloat(t.max);
+			const min = parseFloat(t.min);
+
+			if (!isNaN(val)) {
+				if (val > max) t.value = max;
+				if (val < min) t.value = min;
+				if (t.oninput) t.oninput(); // refresh UI labels
+			}
+		}
+	}, false);
 }
 
 function updateTablinks(tabI)
@@ -409,7 +436,9 @@ function pName(i)
 
 function isPlaylist(i)
 {
-	return pJson[i].playlist && pJson[i].playlist.ps;
+	if (isNumeric(i)) return pJson[i].playlist && pJson[i].playlist.ps;
+	if (isObj(i)) return i.playlist && i.playlist.ps;
+	return false;
 }
 
 function papiVal(i)
@@ -445,7 +474,7 @@ function presetError(empty)
 		if (bckstr.length > 10) hasBackup = true;
 	} catch (e) {}
 
-	var cn = `<div class="pres c" style="padding:8px;margin-bottom:8px;${empty?'':'cursor:pointer;'}" ${empty?'':'onclick="pmtLast=0;loadPresets();"'}>`;
+	var cn = `<div class="pres c" style="padding:8px;margin-bottom:8px;${empty?'':'cursor:pointer;'}" ${empty?'':'onclick="loadPresets();"'}>`;
 	if (empty)
 		cn += `You have no presets yet!`;
 	else
@@ -478,123 +507,81 @@ function restore(txt) {
 	return false;
 }
 
-function loadPresets(callback = null)
-{
-	// 1st boot (because there is a callback)
-	if (callback && pmt == pmtLS && pmt > 0) {
-		// we have a copy of the presets in local storage and don't need to fetch another one
-		populatePresets(true);
-		pmtLast = pmt;
-		callback();
-		return;
-	}
-
-	// afterwards
-	if (!callback && pmt == pmtLast) return;
-
-	fetch(getURL('/presets.json'), {
-		method: 'get'
-	})
-	.then(res => {
-		if (res.status=="404") return {"0":{}};
-		//if (!res.ok) showErrorToast();
-		return res.json();
-	})
-	.then(json => {
-		pJson = json;
-		pmtLast = pmt;
-		populatePresets();
-	})
-	.catch((e)=>{
-		//showToast(e, true);
-		presetError(false);
-	})
-	.finally(()=>{
-		if (callback) setTimeout(callback,99);
+async function loadPresets() {
+	return new Promise((resolve) => {
+		fetch(getURL('/presets.json'), {method: 'get'})
+		.then(res => res.status=="404" ? {"0":{}} : res.json())
+		.then(json => {
+			pJson = json;
+			populatePresets();
+			resolve();
+		})
+		.catch(() => {
+			presetError(false);
+			resolve();
+		})
 	});
 }
 
-function loadPalettes(callback = null)
-{
-	fetch(getURL('/json/palettes'), {
-		method: 'get'
-	})
-	.then((res)=>{
-		if (!res.ok) showErrorToast();
-		return res.json();
-	})
-	.then((json)=>{
-		lJson = Object.entries(json);
-		populatePalettes();
-		retry = false;
-	})
-	.catch((e)=>{
-		if (!retry) {
-			retry = true;
-			setTimeout(loadPalettes, 500); // retry
-		}
-		showToast(e, true);
-	})
-	.finally(()=>{
-		if (callback) callback();
-		updateUI();
+async function loadPalettes(retry=0) {
+	return new Promise((resolve) => {
+		fetch(getURL('/json/palettes'), {method: 'get'})
+		.then(res => res.ok ? res.json() : Promise.reject())
+		.then(json => {
+			lJson = Object.entries(json);
+			populatePalettes();
+			resolve();
+		})
+		.catch((e) => {
+			if (retry<5) {
+				setTimeout(() => loadPalettes(retry+1).then(resolve), 100);
+			} else {
+				showToast(e, true);
+				resolve();
+			}
+		});
 	});
 }
 
-function loadFX(callback = null)
-{
-	fetch(getURL('/json/effects'), {
-		method: 'get'
-	})
-	.then((res)=>{
-		if (!res.ok) showErrorToast();
-		return res.json();
-	})
-	.then((json)=>{
-		eJson = Object.entries(json);
-		populateEffects();
-		retry = false;
-	})
-	.catch((e)=>{
-		if (!retry) {
-			retry = true;
-			setTimeout(loadFX, 500); // retry
-		}
-		showToast(e, true);
-	})
-	.finally(()=>{
-		if (callback) callback();
-		updateUI();
+async function loadFX(retry=0) {
+	return new Promise((resolve) => {
+		fetch(getURL('/json/effects'), {method: 'get'})
+		.then(res => res.ok ? res.json() : Promise.reject())
+		.then(json => {
+			eJson = Object.entries(json);
+			populateEffects();
+			resolve();
+		})
+		.catch((e) => {
+			if (retry<5) {
+				setTimeout(() => loadFX(retry+1).then(resolve), 100);
+			} else {
+				showToast(e, true);
+				resolve();
+			}
+		});
 	});
 }
 
-function loadFXData(callback = null)
-{
-	fetch(getURL('/json/fxdata'), {
-		method: 'get'
-	})
-	.then((res)=>{
-		if (!res.ok) showErrorToast();
-		return res.json();
-	})
-	.then((json)=>{
-		fxdata = json||[];
-		// add default value for Solid
-		fxdata.shift()
-		fxdata.unshift(";!;");
-		retry = false;
-	})
-	.catch((e)=>{
-		fxdata = [];
-		if (!retry) {
-			retry = true;
-			setTimeout(()=>{loadFXData(loadFX);}, 500); // retry
-		}
-		showToast(e, true);
-	})
-	.finally(()=>{
-		if (callback) callback();
-		updateUI();
+async function loadFXData(retry=0) {
+	return new Promise((resolve) => {
+		fetch(getURL('/json/fxdata'), {method: 'get'})
+		.then(res => res.ok ? res.json() : Promise.reject())
+		.then(json => {
+			fxdata = json||[];
+			fxdata.shift();
+			fxdata.unshift(";!;");
+			resolve();
+		})
+		.catch((e) => {
+			fxdata = [];
+			if (retry<5) {
+				setTimeout(() => loadFXData(retry+1).then(resolve), 100);
+			} else {
+				showToast(e, true);
+				resolve();
+			}
+		});
 	});
 }
 
@@ -616,7 +603,7 @@ function populateQL()
 function populatePresets(fromls)
 {
 	if (fromls) pJson = JSON.parse(localStorage.getItem("wledP"));
-	if (!pJson) {setTimeout(loadPresets,250); return;}
+	if (!pJson) {loadPresets(); return;} // note: no await as this is a fallback that should not be needed as init function fetches pJson
 	delete pJson["0"];
 	var cn = "";
 	var arr = Object.entries(pJson).sort(cmpP);
@@ -669,17 +656,21 @@ function parseInfo(i) {
 	//syncTglRecv   = i.str;
 	maxSeg       = i.leds.maxseg;
 	pmt          = i.fs.pmt;
-	if (pcMode && !i.wifi.ap) gId('edit').classList.remove("hide"); else gId('edit').classList.add("hide");
 	gId('buttonNodes').style.display = lastinfo.ndc > 0 ? null:"none";
 	// do we have a matrix set-up
 	mw = i.leds.matrix ? i.leds.matrix.w : 0;
 	mh = i.leds.matrix ? i.leds.matrix.h : 0;
 	isM = mw>0 && mh>0;
+	if (!bsOpts) bsOpts = Array.from(gId('bs').options).map(o => o.cloneNode(true)); // snapshot all options on first call
+	const bsSel = gId('bs');
+	// note: style.display='none' for option elements is not supported on all browsers (notably iOS)
+	bsSel.replaceChildren(...bsOpts.filter(o => isM || o.dataset.type !== "2D").map(o => o.cloneNode(true))); // allow all in matrix mode, filter 2D blends otherwise
 	if (!isM) {
-		gId("filter2D").classList.add('hide');
+		gId("filter2D").classList.add('hide'); // hide 2D effects in non-matrix mode
 	} else {
 		gId("filter2D").classList.remove('hide');
 	}
+	gId("updBt").style.display = (i.opt & 1) ? '':'none';
 //	if (i.noaudio) {
 //		gId("filterVol").classList.add("hide");
 //		gId("filterFreq").classList.add("hide");
@@ -696,10 +687,10 @@ function parseInfo(i) {
 //var setInnerHTML = function(elm, html) {
 //	elm.innerHTML = html;
 //	Array.from(elm.querySelectorAll("script")).forEach( oldScript => {
-//	  const newScript = document.createElement("script");
+//	  const newScript = d.createElement("script");
 //	  Array.from(oldScript.attributes)
 //		.forEach( attr => newScript.setAttribute(attr.name, attr.value) );
-//	  newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+//	  newScript.appendChild(d.createTextNode(oldScript.innerHTML));
 //	  oldScript.parentNode.replaceChild(newScript, oldScript);
 //	});
 //}
@@ -807,10 +798,33 @@ function populateSegments(s)
 							`<option value="4" ${inst.m12==4?' selected':''}>Pinwheel</option>`+
 						`</select></div>`+
 					`</div>`;
+		let blend = `<div class="lbl-l">Blend mode<br>`+
+						`<div class="sel-p"><select class="sel-ple" id="seg${i}bm" onchange="setBm(${i})">`+
+							`<option value="0" ${inst.bm==0?' selected':''}>Top/Default</option>`+
+							`<option value="1" ${inst.bm==1?' selected':''}>Bottom/None</option>`+
+							`<option value="2" ${inst.bm==2?' selected':''}>Add</option>`+
+							`<option value="3" ${inst.bm==3?' selected':''}>Subtract</option>`+
+							`<option value="4" ${inst.bm==4?' selected':''}>Difference</option>`+
+							`<option value="5" ${inst.bm==5?' selected':''}>Average</option>`+
+							`<option value="6" ${inst.bm==6?' selected':''}>Multiply</option>`+
+							`<option value="7" ${inst.bm==7?' selected':''}>Divide</option>`+
+							`<option value="8" ${inst.bm==8?' selected':''}>Lighten</option>`+
+							`<option value="9" ${inst.bm==9?' selected':''}>Darken</option>`+
+							`<option value="10" ${inst.bm==10?' selected':''}>Screen</option>`+
+							`<option value="11" ${inst.bm==11?' selected':''}>Overlay</option>`+
+							`<option value="12" ${inst.bm==12?' selected':''}>Hard Light</option>`+
+							`<option value="13" ${inst.bm==13?' selected':''}>Soft Light</option>`+
+							`<option value="14" ${inst.bm==14?' selected':''}>Dodge</option>`+
+							`<option value="15" ${inst.bm==15?' selected':''}>Burn</option>`+
+							`<option value="16" ${inst.bm==16?' selected':''}>Stencil</option>`+
+						`</select></div>`+
+					`</div>`;
 		let sndSim = `<div data-snd="si" class="lbl-s hide">Sound sim<br>`+
 						`<div class="sel-p"><select class="sel-p" id="seg${i}si" onchange="setSi(${i})">`+
 							`<option value="0" ${inst.si==0?' selected':''}>BeatSin</option>`+
 							`<option value="1" ${inst.si==1?' selected':''}>WeWillRockYou</option>`+
+							`<option value="2" ${inst.si==2?' selected':''}>10/13</option>`+
+							`<option value="3" ${inst.si==3?' selected':''}>14/3</option>`+
 						`</select></div>`+
 					`</div>`;
 		cn += `<div class="seg lstI ${i==s.mainseg && !simplifiedUI ? 'selected' : ''} ${exp ? "expanded":""}" id="seg${i}" data-set="${inst.set}">`+
@@ -860,6 +874,7 @@ function populateSegments(s)
 					`</tr>`+
 					`</table>`+
 					`<div class="h bp" id="seg${i}len"></div>`+
+					blend +
 					(!isMSeg ? rvXck : '') +
 					(isMSeg&&stoY-staY>1&&stoX-staX>1 ? map2D : '') +
 					(s.AudioReactive && s.AudioReactive.on ? "" : sndSim) +
@@ -882,6 +897,7 @@ function populateSegments(s)
 	gId("segcont").classList.remove("hide");
 	let noNewSegs = (lowestUnused >= maxSeg);
 	resetUtil(noNewSegs);
+	if (segCount === 0) return; // no segments to populate
 	for (var i = 0; i <= lSeg; i++) {
 		if (!gId(`seg${i}`)) continue;
 		updateLen(i);
@@ -973,23 +989,39 @@ function populatePalettes()
 		);
 	}
 	gId('pallist').innerHTML=html;
-	// append custom palettes (when loading for the 1st time)
+	// append usermod palettes (fixed ID space: 255 down to 201)
 	let li = lastinfo;
-	if (!isEmpty(li) && li.cpalcount) {
-		for (let j = 0; j<li.cpalcount; j++) {
+	if (!isEmpty(li) && li.umpalcount && li.umpalnames) {
+		for (let j = 0; j < li.umpalcount; j++) {
 			let div = d.createElement("div");
 			gId('pallist').appendChild(div);
 			div.outerHTML = generateListItemHtml(
 				'palette',
 				255-j,
-				'~ Custom '+j+' ~',
+				li.umpalnames[j],
 				'setPalette',
 				`<div class="lstIprev" style="${genPalPrevCss(255-j)}"></div>`
 			);
 		}
 	}
-	if (li.cpalcount>0) gId("rmPal").classList.remove("hide");
-	else                gId("rmPal").classList.add("hide");
+	// append user custom palettes (fixed ID space: 200 down to FIXED_PALETTE_COUNT+1)
+	if (!isEmpty(li) && li.cpalcount) {
+		for (let j = 0; j < li.cpalcount; j++) {
+			const id = 200 - j;
+			const pd = palettesData[id];
+			if (pd && pd.length === 16 && pd.every(e => e[1] === 128 && e[2] === 128 && e[3] === 128)) continue; // skip gray gap-placeholder entries
+			let div = d.createElement("div");
+			gId('pallist').appendChild(div);
+			div.outerHTML = generateListItemHtml(
+				'palette',
+				id,
+				'~ Custom '+j+' ~',
+				'setPalette',
+				`<div class="lstIprev" style="${genPalPrevCss(id)}"></div>`
+			);
+		}
+	}
+	updateSelectedPalette(selectedPal); // update selection after adding usermod and custom palettes
 }
 
 function redrawPalPrev()
@@ -1019,8 +1051,7 @@ function genPalPrevCss(id)
 	}
 
 	var gradient = [];
-	for (let j = 0; j < paletteData.length; j++) {
-		const e = paletteData[j];
+	paletteData.forEach((e,j) => {
 		let r, g, b;
 		let index = false;
 		if (Array.isArray(e)) {
@@ -1042,9 +1073,8 @@ function genPalPrevCss(id)
 		if (index === false) {
 			index = Math.round(j / paletteData.length * 100);
 		}
-
 		gradient.push(`rgb(${r},${g},${b}) ${index}%`);
-	}
+	});
 
 	return `background: linear-gradient(to right,${gradient.join()});`;
 }
@@ -1074,6 +1104,11 @@ function btype(b)
 		case 34: return "ESP32-S3";
 		case 5:
 		case 35: return "ESP32-C3";
+		case 39: return "ESP32-C6";
+		case 40: return "ESP32-C61";
+		case 41: return "ESP32-C5";
+		case 42:
+		case 43: return "ESP32-P4";
 		case 1:
 		case 82: return "ESP8266";
 	}
@@ -1168,7 +1203,7 @@ function updateLen(s)
 	let mySD = gId("mkSYD");
 	if (isM) {
 		// do we have 1D segment *after* the matrix?
-		if (start >= mw*mh) {
+		if (start >= mw*mh && s > 0) {
 			if (sY) { sY.value = 0; sY.max = 0; sY.min = 0; }
 			if (eY) { eY.value = 1; eY.max = 1; eY.min = 0; }
 			sX.min = mw*mh; sX.max = ledCount-1;
@@ -1254,7 +1289,6 @@ function updateUI()
 	gId('buttonPower').className = (isOn) ? 'active':'';
 	gId('buttonNl').className = (nlA) ? 'active':'';
 	gId('buttonSync').className = (syncSend) ? 'active':'';
-	gId('pxmb').style.display = (isM) ? "inline-block" : "none";
 
 	updateSelectedFx();
 	updateSelectedPalette(selectedPal); // must be after updateSelectedFx() to un-hide color slots for * palettes
@@ -1302,7 +1336,8 @@ function updateSelectedPalette(s)
 	if (selElement) selElement.classList.remove('selected');
 
 	var selectedPalette = parent.querySelector(`.lstI[data-id="${s}"]`);
-	if (selectedPalette)  parent.querySelector(`.lstI[data-id="${s}"]`).classList.add('selected');
+	if (!selectedPalette) return; // palette not yet loaded (custom palette on initial load)
+	selectedPalette.classList.add('selected');
 
 	// Display selected palette name on button in simplified UI
 	let selectedName = selectedPalette.querySelector(".lstIname").innerText;
@@ -1416,11 +1451,11 @@ function makeWS() {
 	};
 	ws.onclose = (e)=>{
 		gId('connind').style.backgroundColor = "var(--c-r)";
-		if (wsRpt++ < 5) setTimeout(makeWS,1500); // retry WS connection
+		if (wsRpt++ < 10) setTimeout(makeWS,wsRpt * 200); // retry WS connection
 		ws = null;
 	}
 	ws.onopen = (e)=>{
-		//ws.send("{'v':true}"); // unnecessary (https://github.com/Aircoookie/WLED/blob/master/wled00/ws.cpp#L18)
+		//ws.send("{'v':true}"); // unnecessary (https://github.com/wled/WLED/blob/master/wled00/ws.cpp#L18)
 		wsRpt = 0;
 		reqsLegal = true;
 	}
@@ -1443,43 +1478,40 @@ function readState(s,command=false)
 
 	tr = s.transition;
 	gId('tt').value = tr/10;
+	const bsSel = gId('bs');
+	bsSel.value = s.bs || 0; // assign blending style
+	if (!bsSel.value) bsSel.value = 0; // fall back to Fade if option does not exist
+	if (tr===0) gId('bsp').classList.add('hide')
+	else gId('bsp').classList.remove('hide')
 
 	populateSegments(s);
-	var selc=0;
-	var sellvl=0; // 0: selc is invalid, 1: selc is mainseg, 2: selc is first selected
 	hasRGB = hasWhite = hasCCT = has2D = false;
-	segLmax = 0;
-	for (let i = 0; i < (s.seg||[]).length; i++)
-	{
-		if (sellvl == 0 && s.seg[i].id == s.mainseg) {
-			selc = i;
-			sellvl = 1;
-		}
-		if (s.seg[i].sel) {
-			if (sellvl < 2) selc = i; // get first selected segment
-			sellvl = 2;
-			let w  = (s.seg[i].stop - s.seg[i].start);
-			let h  = s.seg[i].stopY ? (s.seg[i].stopY - s.seg[i].startY) : 1;
-			let lc = lastinfo.leds.seglc[i];
+	segLmax = 0; // reset max selected segment length
+	let i = {};
+	// determine light capabilities from selected segments
+	for (let seg of (s.seg||[])) {
+		let w  = (seg.stop - seg.start);
+		let h  = seg.stopY ? (seg.stopY - seg.startY) : 1;
+		let lc = seg.lc;
+		if (w*h > segLmax) segLmax = w*h;
+		if (seg.sel) {
+			if (isEmpty(i) || (i.id == s.mainseg && !i.sel)) i = seg; // get first selected segment (and replace mainseg if it is not selected)
 			hasRGB   |= !!(lc & 0x01);
 			hasWhite |= !!(lc & 0x02);
 			hasCCT   |= !!(lc & 0x04);
 			has2D    |= w > 1 && h > 1;
-			if (w*h > segLmax) segLmax = w*h;
-		}
+		} else if (isEmpty(i) && seg.id == s.mainseg) i = seg; // assign mainseg if no segments are selected
 	}
-	var i=s.seg[selc];
-	if (sellvl == 1) {
-		let lc = lastinfo.leds.seglc[selc];
-		hasRGB   = !!(lc & 0x01);
-		hasWhite = !!(lc & 0x02);
-		hasCCT   = !!(lc & 0x04);
-		has2D    = (i.stop - i.start) > 1 && (i.stopY ? (i.stopY - i.startY) : 1) > 1;
-	}
-	if (!i) {
-		showToast('No Segments!', true);
+	if (isEmpty(i)) {
+		showToast('No segments!', true);
 		updateUI();
 		return true;
+	} else if (i.id == s.mainseg) {
+		// fallback if no segments are selected but we have mainseg
+		hasRGB   |= !!(i.lc & 0x01);
+		hasWhite |= !!(i.lc & 0x02);
+		hasCCT   |= !!(i.lc & 0x04);
+		has2D    |= (i.stop - i.start) > 1 && (i.stopY ? (i.stopY - i.startY) : 1) > 1;
 	}
 
 	var cd = gId('csl').querySelectorAll("button");
@@ -1510,6 +1542,9 @@ function readState(s,command=false)
 				break;
 			case  3:
 				errstr = "Buffer locked!";
+				break;
+			case  7:
+				errstr = "No RAM for buffer!";
 				break;
 			case  8:
 				errstr = "Effect RAM depleted!";
@@ -1665,14 +1700,10 @@ function setEffectParameters(idx)
 			paOnOff[0] = paOnOff[0].substring(0,dPos);
 		}
 		if (paOnOff.length>0 && paOnOff[0] != "!") text = paOnOff[0];
-		gId("adPal").classList.remove("hide");
-		if (lastinfo.cpalcount>0) gId("rmPal").classList.remove("hide");
 	} else {
 		// disable palette list
 		text += ' not used';
 		palw.style.display = "none";
-		gId("adPal").classList.add("hide");
-		gId("rmPal").classList.add("hide");
 		// Close palette dialog if not available
 		if (palw.lastElementChild.tagName == "DIALOG") {
 			palw.lastElementChild.close();
@@ -1691,76 +1722,68 @@ function setEffectParameters(idx)
 
 var jsonTimeout;
 var reqsLegal = false;
+async function requestJson(command=null, retry=0) {
+	return new Promise((resolve, reject) => {
+		gId('connind').style.backgroundColor = "var(--c-y)";
+		if (command && !reqsLegal) {resolve(); return;}
+		if (!jsonTimeout) jsonTimeout = setTimeout(()=>{if (ws) ws.close(); ws=null; showErrorToast()}, 3000);
 
-function requestJson(command=null)
-{
-	gId('connind').style.backgroundColor = "var(--c-y)";
-	if (command && !reqsLegal) return; // stop post requests from chrome onchange event on page restore
-	if (!jsonTimeout) jsonTimeout = setTimeout(()=>{if (ws) ws.close(); ws=null; showErrorToast()}, 3000);
-	var req = null;
-	var useWs = (ws && ws.readyState === WebSocket.OPEN);
-	var type = command ? 'post':'get';
-	if (command) {
-		command.v = true; // force complete /json/si API response
-		command.time = Math.floor(Date.now() / 1000);
-		var t = gId('tt');
-		if (t.validity.valid && command.transition==null) {
-			var tn = parseInt(t.value*10);
-			if (tn != tr) command.transition = tn;
+		var useWs = (ws && ws.readyState === WebSocket.OPEN);
+		var req = null;
+		if (command) {
+			command.v = true;
+			command.time = Math.floor(Date.now() / 1000);
+			var t = gId('tt');
+			if (t && t.validity.valid && command.transition==null) {
+				var tn = parseInt(t.value*10);
+				if (tn != tr) command.transition = tn;
+			}
+			req = JSON.stringify(command);
+			if (req.length > 1340) useWs = false;
+			if (req.length > 500 && lastinfo && lastinfo.arch == "esp8266") useWs = false;
 		}
-		req = JSON.stringify(command);
-		if (req.length > 1340) useWs = false; // do not send very long requests over websocket
-		if (req.length >  500 && lastinfo && lastinfo.arch == "esp8266") useWs = false; // esp8266 can only handle 500 bytes
-	};
 
-	if (useWs) {
-		ws.send(req?req:'{"v":true}');
-		return;
-	}
-
-	fetch(getURL('/json/si'), {
-		method: type,
-		headers: {"Content-Type": "application/json; charset=UTF-8"},
-		body: req
-	})
-	.then(res => {
-		clearTimeout(jsonTimeout);
-		jsonTimeout = null;
-		if (!res.ok) showErrorToast();
-		return res.json();
-	})
-	.then(json => {
-		lastUpdate = new Date();
-		clearErrorToast(3000);
-		gId('connind').style.backgroundColor = "var(--c-g)";
-		if (!json) { showToast('Empty response', true); return; }
-		if (json.success) return;
-		if (json.info) {
-			let i = json.info;
-			parseInfo(i);
-			populatePalettes(i);
-			if (isInfo) populateInfo(i);
-			if (simplifiedUI) simplifyUI();
+		if (useWs) {
+			ws.send(req?req:'{"v":true}');
+			resolve();
+			return;
 		}
-		var s = json.state ? json.state : json;
-		readState(s);
 
-		//load presets and open websocket sequentially
-		if (!pJson || isEmpty(pJson)) setTimeout(()=>{
-			loadPresets(()=>{
-				wsRpt = 0;
-				if (!(ws && ws.readyState === WebSocket.OPEN)) makeWS();
-			});
-		},25);
-		reqsLegal = true;
-		retry = false;
-	})
-	.catch((e)=>{
-		if (!retry) {
-			retry = true;
-			setTimeout(requestJson,500);
-		}
-		showToast(e, true);
+		fetch(getURL('/json/si'), {
+			method: command ? 'post' : 'get',
+			headers: {"Content-Type": "application/json; charset=UTF-8"},
+			body: req
+		})
+		.then(res => {
+			clearTimeout(jsonTimeout);
+			jsonTimeout = null;
+			return res.ok ? res.json() : Promise.reject();
+		})
+		.then(json => {
+			lastUpdate = new Date();
+			clearErrorToast(3000);
+			gId('connind').style.backgroundColor = "var(--c-g)";
+			if (!json) { showToast('Empty response', true); resolve(); return; }
+			if (json.success) {resolve(); return;}
+			if (json.info) {
+				parseInfo(json.info);
+				if (isInfo) populateInfo(json.info);
+				if (simplifiedUI) simplifyUI();
+			}
+			var s = json.state ? json.state : json;
+			readState(s);
+
+			reqsLegal = true;
+			resolve();
+		})
+		.catch((e)=>{
+			if (retry<10) {
+				setTimeout(() => requestJson(command,retry+1).then(resolve).catch(reject), retry*50);
+			} else {
+				showToast(e, true);
+				resolve();
+			}
+		});
 	});
 }
 
@@ -1903,15 +1926,16 @@ function resetUtil(off=false)
 	if (lSeg>2) d.querySelectorAll("#Segments .pop").forEach((e)=>{e.classList.remove("hide");});
 }
 
-function makePlSel(el, incPl=false)
+function makePlSel(p, el)
 {
 	var plSelContent = "";
 	delete pJson["0"];	// remove filler preset
 	Object.entries(pJson).sort(cmpP).forEach((a)=>{
 		var n = a[1].n ? a[1].n : "Preset " + a[0];
+		if (isPlaylist(a[1])) n += ' &#9654;'; // mark playlist
 		if (cfg.comp.idsort) n = a[0] + ' ' + n;
-		if (!(!incPl && a[1].playlist && a[1].playlist.ps)) // skip playlists, sub-playlists not yet supported
-			plSelContent += `<option value="${a[0]}" ${a[0]==el?"selected":""}>${n}</option>`;
+		// skip endless playlists and itself
+		if (!isPlaylist(a[1]) || (a[1].playlist.repeat > 0 && a[0]!=p)) plSelContent += `<option value="${a[0]}" ${a[0]==el?"selected":""}>${n}</option>`;
 	});
 	return plSelContent;
 }
@@ -1936,21 +1960,23 @@ function refreshPlE(p)
 	});
 }
 
-// p: preset ID, i: ps index
+// p: preset ID, i: playlist item index
 function addPl(p,i)
 {
-	plJson[p].ps.splice(i+1,0,0);
-	plJson[p].dur.splice(i+1,0,plJson[p].dur[i]);
-	plJson[p].transition.splice(i+1,0,plJson[p].transition[i]);
+	const pl = plJson[p];
+	pl.ps.splice(i+1,0,1);
+	pl.dur.splice(i+1,0,pl.dur[i]);
+	pl.transition.splice(i+1,0,pl.transition[i]);
 	refreshPlE(p);
 }
 
 function delPl(p,i)
 {
-	if (plJson[p].ps.length < 2) return;
-	plJson[p].ps.splice(i,1);
-	plJson[p].dur.splice(i,1);
-	plJson[p].transition.splice(i,1);
+	const pl = plJson[p];
+	if (pl.ps.length < 2) return;
+	pl.ps.splice(i,1);
+	pl.dur.splice(i,1);
+	pl.transition.splice(i,1);
 	refreshPlE(p);
 }
 
@@ -1967,6 +1993,13 @@ function pleDur(p,i,field)
 
 function pleTr(p,i,field)
 {
+	const du = gId(`pl${p}du${i}`);
+	const dv = parseFloat(du.value); // duaration value in seconds
+	const max = parseFloat(field.max);
+	let val = parseFloat(field.value);
+	if (isNaN(val)) return;
+	val = Math.min(val, max, dv > 0 ? dv : max); // limit to max or duration, whichever is smaller
+	field.value = val;
 	if (field.validity.valid)
 		plJson[p].transition[i] = Math.floor(field.value*10);
 }
@@ -1986,6 +2019,17 @@ function plR(p)
 	}
 }
 
+function plM(p)
+{
+	const man = gId(`pl${p}manual`).checked;
+	plJson[p].dur.forEach((e,i)=>{
+		const d = gId(`pl${p}du${i}`);
+		plJson[p].dur[i] = e = man ? 0 : 100;
+		d.value = e/10; // 10s default 
+		d.readOnly = man;
+	});
+}
+
 function makeP(i,pl)
 {
 	var content = "";
@@ -1999,10 +2043,15 @@ function makeP(i,pl)
 			r: false,
 			end: 0
 		};
-		var rep = plJson[i].repeat ? plJson[i].repeat : 0;
+		const rep = plJson[i].repeat ? plJson[i].repeat : 0;
+		const man = plJson[i].dur == 0;
 		content =
 `<div id="ple${i}" style="margin-top:10px;"></div><label class="check revchkl">Shuffle
 	<input type="checkbox" id="pl${i}rtgl" onchange="plR(${i})" ${plJson[i].r||rep<0?"checked":""}>
+	<span class="checkmark"></span>
+</label>
+<label class="check revchkl">Manual advance
+	<input type="checkbox" id="pl${i}manual" onchange="plM(${i})" ${man?"checked":""}>
 	<span class="checkmark"></span>
 </label>
 <label class="check revchkl">Repeat indefinitely
@@ -2015,7 +2064,7 @@ function makeP(i,pl)
 <div class="sel-p"><select class="sel-ple" id="pl${i}selEnd" onchange="plR(${i})" data-val=${plJson[i].end?plJson[i].end:0}>
 <option value="0">None</option>
 <option value="255" ${plJson[i].end && plJson[i].end==255?"selected":""}>Restore preset</option>
-${makePlSel(plJson[i].end?plJson[i].end:0, true)}
+${makePlSel(i, plJson[i].end?plJson[i].end:0)}
 </select></div></div>
 </div>
 <div class="c"><button class="btn btn-p" onclick="testPl(${i}, this)"><i class='icons btn-icon'>&#xe139;</i>Test</button></div>`;
@@ -2088,25 +2137,26 @@ function makePUtil()
 
 function makePlEntry(p,i)
 {
+	const man = gId(`pl${p}manual`).checked;
 	return `<div class="plentry">
 	<div class="hrz"></div>
 	<table>
 	<tr>
 		<td width="80%" colspan=2>
 			<div class="sel-p"><select class="sel-pl" onchange="plePs(${p},${i},this)" data-val="${plJson[p].ps[i]}" data-index="${i}">
-			${makePlSel(plJson[p].ps[i])}
+			${makePlSel(p, plJson[p].ps[i])}
 			</select></div>
 		</td>
 		<td class="c"><button class="btn btn-pl-add" onclick="addPl(${p},${i})"><i class="icons btn-icon">&#xe18a;</i></button></td>
 	</tr>
 	<tr>
-		<td class="c">Duration</td>
+		<td class="c">Duration <i style="font-size:70%;">(0=inf.)</i></td>
 		<td class="c">Transition</td>
 		<td class="c">#${i+1}</td>
 	</tr>
 	<tr>
-		<td class="c" width="40%"><input class="segn" type="number" placeholder="Duration" max=6553.0 min=0.2 step=0.1 oninput="pleDur(${p},${i},this)" value="${plJson[p].dur[i]/10.0}">s</td>
-		<td class="c" width="40%"><input class="segn" type="number" placeholder="Transition" max=65.0 min=0.0 step=0.1 oninput="pleTr(${p},${i},this)" value="${plJson[p].transition[i]/10.0}">s</td>
+		<td class="c" width="40%"><input class="segn" type="number" style="width:7ch" placeholder="Duration" max=4294967 min=0.0 step=0.1 oninput="pleDur(${p},${i},this)" value="${plJson[p].dur[i]/10.0}" id="pl${p}du${i}" ${man?"readonly":""}>s</td>
+		<td class="c" width="40%"><input class="segn" type="number" style="width:4ch" placeholder="Transition" max=65.5 min=0.0 step=0.1 oninput="pleTr(${p},${i},this)" onfocus="pleTr(${p},${i},this)" value="${plJson[p].transition[i]/10.0}" id="pl${p}tr${i}">s</td>
 		<td class="c"><button class="btn btn-pl-del" onclick="delPl(${p},${i})"><i class="icons btn-icon">&#xe037;</i></button></div></td>
 	</tr>
 	</table>
@@ -2308,6 +2358,13 @@ function setSi(s)
 	requestJson(obj);
 }
 
+function setBm(s)
+{
+	var value = gId(`seg${s}bm`).value;
+	var obj = {"seg": {"id": s, "bm": value}};
+	requestJson(obj);
+}
+
 function setTp(s)
 {
 	var tp = gId(`seg${s}tp`).checked;
@@ -2470,6 +2527,10 @@ function saveP(i,pl)
 		obj.o = true;
 	} else {
 		if (pl) {
+			plJson[i].ps.forEach((_,idx) => {
+				const trField = gId(`pl${i}tr${idx}`);
+				if (trField) pleTr(i, idx, trField); // make sure transition time is not longer than duration
+			});
 			obj.playlist = plJson[i];
 			obj.on = true;
 			obj.o = true;
@@ -2501,7 +2562,7 @@ function saveP(i,pl)
 	}
 	populatePresets();
 	resetPUtil();
-	setTimeout(()=>{pmtLast=0; loadPresets();}, 750); // force reloading of presets
+	setTimeout(()=>{loadPresets();}, 750); // force reloading of presets
 }
 
 function testPl(i,bt) {
@@ -2731,7 +2792,7 @@ setInterval(()=>{
 	gId('heart').style.color = `hsl(${hc}, 100%, 50%)`;
 }, 910);
 
-function openGH() { window.open("https://github.com/Aircoookie/WLED/wiki"); }
+function openGH() { window.open("https://github.com/wled/WLED/wiki"); }
 
 var cnfr = false;
 function cnfReset()
@@ -2767,56 +2828,52 @@ function rSegs()
 	requestJson(obj);
 }
 
-function loadPalettesData(callback = null)
-{
-	if (palettesData) return;
-	const lsKey = "wledPalx";
-	var lsPalData = localStorage.getItem(lsKey);
-	if (lsPalData) {
-		try {
-			var d = JSON.parse(lsPalData);
-			if (d && d.vid == d.vid) {
-				palettesData = d.p;
-				if (callback) callback();
-				return;
-			}
-		} catch (e) {}
-	}
+function loadPalettesData() {
+	return new Promise((resolve) => {
+		if (palettesData) return resolve(); // already loaded
+		var lsPalData = localStorage.getItem("wledPalx");
+		if (lsPalData) {
+			try {
+				var d = JSON.parse(lsPalData);
+				if (d && d.vid == lastinfo.vid && d.pcount == lastinfo.palcount) {
+					palettesData = d.p;
+					redrawPalPrev();
+					return resolve();
+				}
+			} catch (e) {}
+		}
 
-	palettesData = {};
-	getPalettesData(0, ()=>{
-		localStorage.setItem(lsKey, JSON.stringify({
-			p: palettesData,
-			vid: lastinfo.vid
-		}));
-		redrawPalPrev();
-		if (callback) setTimeout(callback, 99);
+		palettesData = {};
+		getPalettesData(0, () => {
+			localStorage.setItem("wledPalx", JSON.stringify({
+				p: palettesData,
+				vid: lastinfo.vid,
+				pcount: lastinfo.palcount // total palette count, refresh cache if it changes
+			}));
+			redrawPalPrev();
+			setTimeout(resolve, 99); // delay optional
+		});
 	});
 }
 
-function getPalettesData(page, callback)
-{
-	fetch(getURL(`/json/palx?page=${page}`), {
-		method: 'get'
-	})
-	.then(res => {
-		if (!res.ok) showErrorToast();
-		return res.json();
-	})
+function getPalettesData(page, callback, retry=0) {
+	fetch(getURL(`/json/palx?page=${page}`), {method: 'get'})
+	.then(res => res.ok ? res.json() : Promise.reject())
 	.then(json => {
-		retry = false;
 		palettesData = Object.assign({}, palettesData, json.p);
 		if (page < json.m) setTimeout(()=>{ getPalettesData(page + 1, callback); }, 75);
 		else callback();
 	})
 	.catch((error)=>{
-		if (!retry) {
-			retry = true;
-			setTimeout(()=>{getPalettesData(page,callback);}, 500); // retry
+		if (retry<5) {
+			setTimeout(()=>{getPalettesData(page,callback,retry+1);}, 100);
+		} else {
+			showToast(error, true);
+			callback();
 		}
-		showToast(error, true);
 	});
 }
+
 /*
 function hideModes(txt)
 {
@@ -2918,7 +2975,7 @@ function filterFocus(e) {
 	}
 	if (e.type === "blur") {
 		setTimeout(() => {
-			if (e.target === document.activeElement && document.hasFocus()) return;
+			if (e.target === d.activeElement && d.hasFocus()) return;
 			// do not hide if filter is active
 			if (!c) {
 				// compute sticky top
@@ -3033,11 +3090,9 @@ function unify(e) {	return e.changedTouches ? e.changedTouches[0] : e; }
 
 function hasIroClass(classList)
 {
-	for (var i = 0; i < classList.length; i++) {
-		var element = classList[i];
-		if (element.startsWith('Iro')) return true;
-	}
-	return false;
+	let found = false;
+	classList.forEach((e)=>{ if (e.startsWith('Iro')) found = true; });
+	return found;
 }
 //required by rangetouch.js
 function lock(e)
@@ -3100,7 +3155,6 @@ function togglePcMode(fromB = false)
 	if (!fromB && ((wW < 1024 && lastw < 1024) || (wW >= 1024 && lastw >= 1024))) return; // no change in size and called from size()
 	if (pcMode) openTab(0, true);
 	gId('buttonPcm').className = (pcMode) ? "active":"";
-	if (pcMode && !ap) gId('edit').classList.remove("hide"); else gId('edit').classList.add("hide");
 	gId('bot').style.height = (pcMode && !cfg.comp.pcmbot) ? "0":"auto";
 	sCol('--bh', gId('bot').clientHeight + "px");
 	_C.style.width = (pcMode || simplifiedUI)?'100%':'400%';
@@ -3124,7 +3178,8 @@ function mergeDeep(target, ...sources)
 	return mergeDeep(target, ...sources);
 }
 
-function tooltip(cont=null) {
+function tooltip(cont=null)
+{
 	d.querySelectorAll((cont?cont+" ":"")+"[title]").forEach((element)=>{
 		element.addEventListener("pointerover", ()=>{
 			// save title
@@ -3167,7 +3222,7 @@ function simplifyUI() {
 	// Create dropdown dialog
 	function createDropdown(id, buttonText, dialogElements = null) {
 		// Create dropdown dialog
-		const dialog = document.createElement("dialog");
+		const dialog = d.createElement("dialog");
 		// Move every dialogElement to the dropdown dialog or if none are given, move all children of the element with the given id
 		if (dialogElements) {
 			dialogElements.forEach((e) => {
@@ -3180,7 +3235,7 @@ function simplifyUI() {
 		}
 
 		// Create button for the dropdown
-		const btn = document.createElement("button");
+		const btn = d.createElement("button");
 		btn.id = id + "btn";
 		btn.classList.add("btn");
 		btn.innerText = buttonText;
@@ -3228,7 +3283,7 @@ function simplifyUI() {
 
 	// Hide palette label
 	gId("pall").style.display = "none";
-	gId("Colors").insertBefore(document.createElement("br"), gId("pall"));
+	gId("Colors").insertBefore(d.createElement("br"), gId("pall"));
 	// Hide effect label
 	gId("modeLabel").style.display = "none";
 
@@ -3240,7 +3295,7 @@ function simplifyUI() {
 
 	// Hide bottom bar 
 	gId("bot").style.display = "none";
-	document.documentElement.style.setProperty('--bh', '0px');
+	d.documentElement.style.setProperty('--bh', '0px');
 
 	// Hide other tabs
 	gId("Effects").style.display = "none";
@@ -3266,7 +3321,7 @@ function checkVersionUpgrade(info) {
 	if (info.wifi && info.wifi.ap) return;
 
 	// Fetch version-info.json using existing /edit endpoint
-	fetch(getURL('/edit?edit=/version-info.json'), {
+	fetch(getURL('/edit?func=edit&path=/version-info.json'), {
 		method: 'get'
 	})
 		.then(res => {
@@ -3382,13 +3437,23 @@ function showVersionUpgradePrompt(info, oldVersion, newVersion) {
 
 function reportUpgradeEvent(info, oldVersion, alwaysReport) {
 	showToast('Reporting upgrade...');
+	const IR_TYPES = {
+		0: null,           // not configured — omit field entirely
+		1: "24-key",       // white 24-key remote
+		2: "24-key-ct",    // white 24-key with CW, WW, CT+, CT- keys
+		3: "40-key",       // blue 40-key remote
+		4: "44-key",       // white 44-key remote
+		5: "21-key",       // white 21-key remote
+		6: "6-key",        // black 6-key learning remote
+		7: "9-key",        // 9-key remote
+		8: "json-remote",  // ir.json configurable remote
+	};
 
-	// Fetch fresh data from /json/info endpoint as requested
-	fetch(getURL('/json/info'), {
-		method: 'get'
-	})
-		.then(res => res.json())
-		.then(infoData => {
+	// Reuse the info argument and fetch only /json/cfg (serialize requests to avoid 503s on low-heap devices)
+	const infoData = info;
+	fetch(getURL('/json/cfg'), {method: 'get'})
+		.then(res => res.ok ? res.json() : Promise.reject(new Error('Failed to fetch /json/cfg')))
+		.then(cfgData => {
 			// Map to UpgradeEventRequest structure per OpenAPI spec
 			// Required fields: deviceId, version, previousVersion, releaseName, chip, ledCount, isMatrix, bootloaderSHA256
 			const upgradeData = {
@@ -3402,12 +3467,59 @@ function reportUpgradeEvent(info, oldVersion, alwaysReport) {
 				bootloaderSHA256: infoData.bootloaderSHA256 || '',   // Bootloader SHA256 hash
 				brand: infoData.brand,                           // Device brand (always present)
 				product: infoData.product,                       // Product name (always present)
-				repo: infoData.repo                              // GitHub repository (always present)
-			};
+				flashSize: infoData.flash,                       // Flash size (always present)
+				repo: infoData.repo,                             // GitHub repository (always present)
+				fsUsed: infoData.fs?.u,                          // Filesystem used space in kB
+				fsTotal: infoData.fs?.t,                         // Filesystem total space in kB
+
+				// LED hardware
+				busCount:      cfgData.hw?.led?.ins?.length ?? 1,
+				busTypes:      (cfgData.hw?.led?.ins ?? []).map(b => busTypeToString(b.type)),
+				matrixWidth:   infoData.leds?.matrix?.w,
+				matrixHeight:  infoData.leds?.matrix?.h,
+				ledFeatures: [
+					...(infoData.leds?.lc & 0x02               ? ["rgbw"] : []),
+					...(infoData.leds?.lc & 0x04               ? ["cct"] : []),
+					...((infoData.leds?.maxpwr ?? 0) > 0       ? ["abl"] : []),
+					...(cfgData.hw?.led?.cr                    ? ["cct-from-rgb"] : []),
+					...(cfgData.hw?.led?.cct                   ? ["white-balance"] : []),
+					...((cfgData.light?.gc?.col ?? 1.0) > 1.0 || (cfgData.light?.gc?.bri ?? 1.0) > 1.0 ? ["gamma"] : []),
+					...(cfgData.light?.aseg                    ? ["auto-segments"] : []),
+					...((cfgData.light?.nl?.mode ?? 0) > 0     ? ["nightlight"] : []),
+				],
+
+				// peripherals (note: i2c/spi may reflect board defaults, not user-configured hardware)
+				peripherals: [
+					...((cfgData.hw?.relay?.pin ?? -1) >= 0                          ? ["relay"] : []),
+					...((cfgData.hw?.btn?.ins ?? []).filter(b => b.type !== 0).length > 0 ? ["buttons"] : []),
+					...((cfgData.eth?.type ?? 0) > 0                                 ? ["ethernet"] : []),
+					...((cfgData.if?.live?.dmx?.inputRxPin ?? 0) > 0                 ? ["dmx-input"] : []),
+					...((cfgData.hw?.ir?.type ?? 0) > 0                              ? ["ir-remote"] : []),
+				],
+				buttonCount: (cfgData.hw?.btn?.ins ?? []).filter(b => b.type !== 0).length,
+
+				// integrations
+				integrations: [
+					...(cfgData.if?.hue?.en                    ? ["hue"] : []),
+					...(cfgData.if?.mqtt?.en                   ? ["mqtt"] : []),
+					...(cfgData.if?.va?.alexa                  ? ["alexa"] : []),
+					...(cfgData.if?.sync?.send?.en             ? ["wled-sync"] : []),
+					...(cfgData.nw?.espnow                     ? ["esp-now"] : []),
+					...(cfgData.if?.sync?.espnow               ? ["esp-now-sync"] : []),
+				],
+
+				// usermods
+				usermods:    Object.keys(cfgData.um ?? {}),
+				usermodIds:  infoData.um ?? [],
+			  };
+
+			// IR remote — only include if configured
+			const irType = IR_TYPES[cfgData.hw?.ir?.type ?? 0];
+			if (irType) upgradeData.irRemoteType = irType;
 
 			// Add optional fields if available
-			if (infoData.psram !== undefined) upgradeData.psramSize = Math.round(infoData.psram / (1024 * 1024));  // convert bytes to MB
-			// Note: partitionSizes not currently available in /json/info endpoint
+			if (infoData.psrSz !== undefined) upgradeData.psramSize = infoData.psrSz;  // Total PSRAM size in MB; can be 0
+
 
 			// Make AJAX call to postUpgradeEvent API
 			return fetch('https://usage.wled.me/api/usage/upgrade', {
@@ -3436,6 +3548,17 @@ function reportUpgradeEvent(info, oldVersion, alwaysReport) {
 			showToast('Report failed', true);
 			updateVersionInfo(info.ver, false, !!alwaysReport);
 		});
+}
+
+function busTypeToString(t) {
+	if (t === 0)                       return "none";
+	if (t === 40)                      return "on-off";
+	if (t >= 16 && t <= 39)            return "digital";      // WS2812, SK6812, etc.
+	if (t >= 41 && t <= 47)            return "pwm";          // analog RGB/CCT/single
+	if (t >= 48 && t <= 63)            return "digital-spi";  // APA102, WS2801, etc.
+	if (t >= 64 && t <= 71)            return "hub75";        // HUB75 matrix panels
+	if (t >= 80 && t <= 95)            return "network";      // DDP, E1.31, ArtNet
+	return "unknown";
 }
 
 function updateVersionInfo(version, neverAsk, alwaysReport) {
