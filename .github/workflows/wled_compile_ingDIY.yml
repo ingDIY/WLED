@@ -7,9 +7,12 @@ on:
       - master
       - release/*
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
-
+    name: Build and Deploy
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -24,19 +27,22 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.x'
+        cache: 'pip'
 
     - name: Install PlatformIO
-      run: |
-        python -m pip install --upgrade pip
-        pip install --upgrade platformio
+      run: pip install -r requirements.txt
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
-
-    - name: Install Dependencies
+      with:
+        node-version-file: '.nvmrc'
+        cache: 'npm'
+    
+    - name: Update VERSION in wled.h
       run: |
-        cd $GITHUB_WORKSPACE
-        npm install
+        npm ci
+        VERSION=`date +%y%m%d0`
+        sed -i -r -e "s/define VERSION .+/define VERSION $VERSION/" wled00/wled.h
 
     - name: Build All with PlatformIO
       run: |
@@ -56,7 +62,7 @@ jobs:
         git add $GITHUB_WORKSPACE/_flashing/*
 
     - name: Commit files (only from MASTER branch)
-      if: github.ref_name == 'master'
+      if: github.ref_name == 'master' && github.actor != 'github-actions[bot]'
       run: |
         # Committing files to MASTER branch...
         cd $GITHUB_WORKSPACE
