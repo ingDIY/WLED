@@ -27,6 +27,7 @@ var lastinfo = {};
 var isM = false, mw = 0, mh=0;
 var bsOpts = null; // blending style options snapshot, used for dynamic filtering based on matrix mode (iOS compatibility)
 var ws, wsRpt=0;
+var _selFxInterval = null; // interval ID for selected effect position update
 var cfg = {
 	theme:{base:"dark", bg:{url:"", rnd: false, rndGrayscale: false, rndBlur: false}, alpha:{bg:0.6,tab:0.8}, color:{bg:""}},
 	comp :{colors:{picker: true, rgb: false, quick: true, hex: false},
@@ -1596,7 +1597,7 @@ function readState(s,command=false)
 				errstr = "Please switch your device off and back on.";
 		  break;
 		}
-		showToast((s.error<100) ? 'Error ': 'Note ' + s.error + ": " + errstr, true);  // show "please restart" as a note, all others as errors
+		showToast(((s.error<100) ? 'Error ': 'Note ') + s.error + ": " + errstr, true);  // show "please restart" as a note, all others as errors
 	}
 
 	selectedPal = i.pal;
@@ -1673,7 +1674,8 @@ function setEffectParameters(idx)
 	}
 
 	setSelectedEffectPosition();
-	setInterval(setSelectedEffectPosition,750);
+	if (_selFxInterval) clearInterval(_selFxInterval);
+	_selFxInterval = setInterval(setSelectedEffectPosition,750);
 	// set html color items on/off
 	var cslLabel = '';
 	var sep = '';
