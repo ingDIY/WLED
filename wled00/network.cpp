@@ -274,7 +274,7 @@ bool initEthernet()
   }
 
   // https://github.com/wled/WLED/issues/5247
-  if (multiWiFi[0].staticIP != (uint32_t)0x00000000 && multiWiFi[0].staticGW != (uint32_t)0x00000000) {
+  if (multiWiFi.size() && multiWiFi[0].staticIP != IPAddress() && multiWiFi[0].staticGW != IPAddress()) {
     ETH.config(multiWiFi[0].staticIP, multiWiFi[0].staticGW, multiWiFi[0].staticSN, dnsAddress);
   } else {
     ETH.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
@@ -421,7 +421,8 @@ void WiFiEvent(WiFiEvent_t event)
   switch (event) {
     case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
       // AP client disconnected
-      if (--apClients == 0 && isWiFiConfigured()) forceReconnect = true; // no clients reconnect WiFi if awailable
+      if (apClients > 0) apClients--;
+      if (apClients == 0 && isWiFiConfigured()) forceReconnect = true; // no clients reconnect WiFi if available
       DEBUG_PRINTF_P(PSTR("WiFi-E: AP Client Disconnected (%d) @ %lus.\n"), (int)apClients, millis()/1000);
       break;
     case ARDUINO_EVENT_WIFI_AP_STACONNECTED:

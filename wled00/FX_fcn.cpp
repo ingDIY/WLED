@@ -227,7 +227,7 @@ void Segment::resetIfRequired() {
 
 void Segment::loadPalette(CRGBPalette16 &targetPalette, uint8_t pal) {
   // there is one randomly generated palette (1) followed by 4 palettes created from segment colors (2-5)
-  // those are followed by 7 fastled palettes (6-12) and 59 gradient palettes (13-71)
+  // those are followed by 7 fastled palettes (6-12) and GRADIENT_PALETTE_COUNT built in gradient palettes
   // then come user custom palettes (IDs <=200) and usermod palettes (IDs 201-255), both growing downward from their respective base IDs
   // palette 0 is a varying palette depending on effect and may be replaced by segment's color if so
   // instructed in color_from_palette()
@@ -458,83 +458,112 @@ void Segment::handleRandomPalette() {
 // strip must be suspended (strip.suspend()) before calling this function
 // this function may call fill() to clear pixels if spacing or mapping changed (which requires setting _vWidth, _vHeight, _vLength or beginDraw())
 void Segment::setGeometry(uint16_t i1, uint16_t i2, uint8_t grp, uint8_t spc, uint16_t ofs, uint16_t i1Y, uint16_t i2Y, uint8_t m12) {
-  // return if neither bounds nor grouping have changed
-  bool boundsUnchanged = (start == i1 && stop == i2);
-  #ifndef WLED_DISABLE_2D
-  boundsUnchanged &= (startY == i1Y && stopY == i2Y); // 2D
-  #endif
-  boundsUnchanged &= (grouping == grp && spacing == spc); // changing grouping and/or spacing changes virtual segment length (painting dimensions)
+  // Sanitise inputs
+  if (i2 <= i1) { // For any values, this means deactivate the segment; we check i2 before i1 for this case
+    i2 = 0;
+  } 
 
-  if (stop && (spc > 0 || m12 != map1D2D)) clear();
-  if (grp) { // prevent assignment of 0
-    grouping = grp;
-    spacing = spc;
-  } else {
-    grouping = 1;
-    spacing = 0;
+  // If i1 is invalid, use old value
+  // Valid range is inside maxWidth, or in trailing segment range
+  if ((i1 >= Segment::maxWidth) && (i1 < Segment::maxWidth*Segment::maxHeight || i1 >= strip.getLengthTotal())) {
+    i1 = start;
   }
-  if (ofs < UINT16_MAX) offset = ofs;
-  map1D2D  = constrain(m12, 0, 7);
+
+  // Check i2 validity
+  if (i2 > 0) {
+    // Clamp i2 to maximum length
+    if ((i1 >= Segment::maxWidth*Segment::maxHeight) && (i2 >= Segment::maxWidth*Segment::maxHeight)) {
+      // Trailing strip after 2D
+      i2 = MIN(i2,strip.getLengthTotal());
+      i1Y = 0;  // 2D Y values are not used for trailing strip
+      i2Y = 1;
+    } else if (i2 > Segment::maxWidth) {
+      i2 = Segment::maxWidth;
+    }
+  }
+
+  #ifndef WLED_DISABLE_2D
+  if (Segment::maxHeight>1) { // 2D
+    if (i1Y >= Segment::maxHeight) {
+      // Unlike i1 (X), Y values don't inherit old values if invalid
+      // This behaviour preserved for backwards compatibility
+      i1Y = 0;   
+    }
+    if (i2Y > Segment::maxHeight) {
+      i2Y = Segment::maxHeight;
+    } else if (i2Y < 1) {
+      i2Y = 1;
+    }
+  } else
+  #endif
+  { 
+    i1Y = 0;
+    i2Y = 1;
+  }
+
+  if (grp == 0) { grp = 1; spc = 0; }  // prevent assignment of 0
+  if (ofs == UINT16_MAX) ofs = offset; // keep current setting if passed illegal value
+  m12 = constrain(m12, 0, 7);
+
+  // Final safety check after all bounds adjustments
+  if ((i1 >= i2) || (i1Y >= i2Y)) { 
+    i2 = 0;  // disable segment
+  }
+
+  // Inputs are ok, check if anything has changed
+  bool boundsUnchanged = (start == i1 && stop == i2)
+  #ifndef WLED_DISABLE_2D
+                       && ((Segment::maxHeight <= 1) || (startY == i1Y && stopY == i2Y))
+  #endif
+                       && (grouping == grp)
+                       && (spacing == spc)
+                       && (offset == ofs)
+                       && (m12 == map1D2D);
 
   if (boundsUnchanged) return;
 
+  DEBUG_PRINTF_P(PSTR("Segment geometry: (%d,%d),(%d,%d) -> (%d,%d),(%d,%d) [%d,%d]\n"), start, stop, startY, stopY, (int)i1, (int)i2, (int)i1Y, (int)i2Y, (int) grp, (int)spc);
+  
   unsigned oldLength = length();
 
-  DEBUGFX_PRINTF_P(PSTR("Segment geometry: %d,%d -> %d,%d [%d,%d]\n"), (int)i1, (int)i2, (int)i1Y, (int)i2Y, (int)grp, (int)spc);
   markForReset();
   stopTransition(); // we can't use transition if segment dimensions changed
   stateChanged = true;      // send UDP/WS broadcast
 
-  // apply change immediately
-  if (i2 <= i1) { //disable segment
-    #ifdef WLED_ENABLE_GIF
-    endImagePlayback(this);
-    #endif
-    deallocateData();
-    p_free(pixels);
-    pixels = nullptr;
-    stop = 0;
-    return;
-  }
-  if (i1 < Segment::maxWidth || (i1 >= Segment::maxWidth*Segment::maxHeight && i1 < strip.getLengthTotal())) start = i1; // Segment::maxWidth equals strip.getLengthTotal() for 1D
-  stop = i2 > Segment::maxWidth*Segment::maxHeight && i1 >= Segment::maxWidth*Segment::maxHeight ? MIN(i2,strip.getLengthTotal()) : constrain(i2, 1, Segment::maxWidth); // check for 2D trailing strip
-  startY = 0;
-  stopY  = 1;
-  #ifndef WLED_DISABLE_2D
-  if (Segment::maxHeight>1) { // 2D
-    if (i1Y < Segment::maxHeight) startY = i1Y;
-    stopY = constrain(i2Y, 1, Segment::maxHeight);
-  }
-  #endif
-  // safety check
-  if (start >= stop || startY >= stopY) {
-    #ifdef WLED_ENABLE_GIF
-    endImagePlayback(this);
-    #endif
-    deallocateData();
-    p_free(pixels);
-    pixels = nullptr;
-    stop = 0;
-    return;
-  }
-  // allocate FX render buffer
-  if (length() != oldLength) {
+  // apply change
+  start = i1;
+  stop = i2;
+  startY = i1Y;
+  stopY = i2Y;
+  grouping = grp;
+  spacing = spc;
+  offset = ofs;
+  map1D2D = m12;
+
+  // Cleanup check
+  auto newLength = length();
+  if ((newLength > 0) && (newLength != oldLength)) {
     // allocate render buffer (always entire segment), prefer IRAM/PSRAM. Note: impact on FPS with PSRAM buffer is low (<2% with QSPI PSRAM) on S2/S3
+    // Note we don't pass BFRALLOC_CLEAR as resetIfRequired() will initialize the buffer later
     p_free(pixels);
     pixels = static_cast<uint32_t*>(allocate_buffer(length() * sizeof(uint32_t), BFRALLOC_PREFER_PSRAM | BFRALLOC_NOBYTEACCESS));
     if (!pixels) {
       DEBUGFX_PRINTLN(F("!!! Not enough RAM for pixel buffer !!!"));
-      #ifdef WLED_ENABLE_GIF
-      endImagePlayback(this);
-      #endif
-      deallocateData();
       errorFlag = ERR_NORAM_PX;
-      stop = 0;
-      return;
+      stop = 0; // will fall through into disable check below
     }
-
   }
-  refreshLightCapabilities();
+
+  if (length() == 0) {
+    #ifdef WLED_ENABLE_GIF
+    endImagePlayback(this);
+    #endif
+    deallocateData();
+    p_free(pixels);
+    pixels = nullptr;
+  } else {
+    refreshLightCapabilities();
+  }
 }
 
 
@@ -708,7 +737,7 @@ uint16_t Segment::virtualLength() const {
         vLen = max(vW,vH); // get the longest dimension
         break;
       case M12_pArc:
-        vLen = sqrt32_bw(vH*vH + vW*vW); // use diagonal
+        vLen = (sqrt32_bw((vH*vH + vW*vW) << 2) + 1) >> 1; // diagonal rounded
         break;
       case M12_sPinwheel:
         vLen = getPinwheelLength(vW, vH);
@@ -787,36 +816,28 @@ void WLED_O2_ATTR Segment::setPixelColor(int i, uint32_t col) const
         if (vStrip > 0)                   setPixelColorRaw(XY(vStrip - 1, vH - i - 1), col);
         else for (int x = 0; x < vW; x++) setPixelColorRaw(XY(x, vH - i - 1), col);
         break;
-      case M12_pArc:
-        // expand in circular fashion from center
-        if (i == 0)
-          setPixelColorRaw(XY(0, 0), col);
-        else {
-          float r = i;
-          float step = HALF_PI / (2.8284f * r + 4); // we only need (PI/4)/(r/sqrt(2)+1) steps
-          for (float rad = 0.0f; rad <= (HALF_PI/2)+step/2; rad += step) {
-            int x = roundf(sin_t(rad) * r);
-            int y = roundf(cos_t(rad) * r);
-            // exploit symmetry
-            setPixelColorXY(x, y, col);
-            setPixelColorXY(y, x, col);
+      case M12_pArc: {
+        // expand in circular fashion from top left corner
+        // Tony Barrera's circle algorithm
+        // https://softwareengineering.stackexchange.com/questions/287478/drawing-concentric-circles-without-gaps/357445#357445 
+        
+        if      (i == 0)           setPixelColorXYRaw(0, 0, col); // 0 and 2 special cases to prevent square
+        else if (i == 2)           setPixelColorXYRaw(1, 1, col);
+        else if (i == vLength()-1) setPixelColorXYRaw(vW-1, vH-1, col); // last i always draws bottom right corner
+
+        int x = 0, y = i;  // i is the radius
+        int d = -(i >> 1); // Initial decision parameter
+
+        while (x <= y) {
+          if (i != x || i != y) { // prevent early square
+            if (y < vH && x < vW) setPixelColorXYRaw(x, y, col);
+            if (y < vW && x < vH) setPixelColorXYRaw(y, x, col);
           }
-          // Bresenham’s Algorithm (may not fill every pixel)
-          //int d = 3 - (2*i);
-          //int y = i, x = 0;
-          //while (y >= x) {
-          //  setPixelColorXY(x, y, col);
-          //  setPixelColorXY(y, x, col);
-          //  x++;
-          //  if (d > 0) {
-          //    y--;
-          //    d += 4 * (x - y) + 10;
-          //  } else {
-          //    d += 4 * x + 6;
-          //  }
-          //}
+          if (d <= 0) d += ++x;
+          else d -= --y;
         }
         break;
+      }
       case M12_pCorner:
         for (int x = 0; x <= i; x++) setPixelColorXY(x, i, col); // note: <= to include i=0. Relies on overflow check in sPC()
         for (int y = 0; y <  i; y++) setPixelColorXY(i, y, col);
@@ -992,9 +1013,17 @@ uint32_t WLED_O2_ATTR Segment::getPixelColor(int i) const
         else            { y = vH - i - 1; };
         break;
       case M12_pArc:
-        if (i > vW && i > vH) {
-          x = y = sqrt32_bw(i*i/2);
-          break; // use diagonal
+        if (i >= vW && i >= vH) { // Barrera's circle algorithm
+          x = vW - 1; y = vH - 1; // default to bottom right if not found
+          int x2 = 0, y2 = i, d = -(i >> 1);
+          int validCount = 0; // return 2nd non mirrored pixel if available
+          while (x2 <= y2 && validCount < 2) {
+            if      (y2 < vH && x2 < vW) {x = x2, y = y2; validCount++;}
+            else if (y2 < vW && x2 < vH) {x = y2, y = x2; validCount++;}
+
+            if (d <= 0) d += ++x2; else d -= --y2;
+          }
+          break;
         }
         // otherwise fallthrough
       case M12_pCorner:
@@ -1585,7 +1614,9 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
         // workaround for On/Off transition
         // (bri != briT) && !bri => from On to Off
         // (bri != briT) &&  bri => from Off to On
-        if ((briOld == 0 || bri == 0) && ((!clipped && (bri != briT) && !bri) || (clipped && (bri != briT) && bri))) c_a = BLACK;
+        // note: only blank pixels once the segment transition has actually started; bri changes before
+        // startTransition() is called (stateUpdated()) and a frame rendered in that window would blank the whole segment
+        if (topSegment.isInTransition() && (briOld == 0 || bri == 0) && ((!clipped && (bri != briT) && !bri) || (clipped && (bri != briT) && bri))) c_a = BLACK;
       }
       // map it into frame buffer
       x = c;  // restore coordiates if we were PUSHing
@@ -1657,7 +1688,9 @@ void WS2812FX::blendSegment(const Segment &topSegment) const {
         // workaround for On/Off transition
         // (bri != briT) && !bri => from On to Off
         // (bri != briT) &&  bri => from Off to On
-        if ((briOld == 0 || bri == 0) && ((!clipped && (bri != briT) && !bri) || (clipped && (bri != briT) && bri))) c_a = BLACK;
+        // note: only blank pixels once the segment transition has actually started; bri changes before
+        // startTransition() is called (stateUpdated()) and a frame rendered in that window would blank the whole segment
+        if (topSegment.isInTransition() && (briOld == 0 || bri == 0) && ((!clipped && (bri != briT) && !bri) || (clipped && (bri != briT) && bri))) c_a = BLACK;
       }
       // map into frame buffer
       i = k; // restore index if we were PUSHing
@@ -1907,8 +1940,9 @@ void WS2812FX::resetSegments() {
   if (isServicing()) return;
   _segments.clear();          // destructs all Segment as part of clearing
   _segments.emplace_back(0, isMatrix ? Segment::maxWidth : _length, 0, isMatrix ? Segment::maxHeight : 1);
-  if(_segments.size() == 0) {
-    _segments.emplace_back(); // if out of heap, create a default segment
+  if (getActiveSegmentsNum() == 0) {
+    _segments.clear();        // free failed segment
+    _segments.emplace_back(); // if out of heap, create a default 30 pixel segment
     errorFlag = ERR_NORAM_PX;
   }
   _segments.shrink_to_fit();  // just in case ...
@@ -1985,6 +2019,7 @@ void WS2812FX::makeAutoSegments(bool forceReset) {
       #endif
     }
   }
+  if (getActiveSegmentsNum() == 0) resetSegments(); // fallback if auto segment creation failed
   _mainSegment = 0;
 
   fixInvalidSegments();
@@ -2162,5 +2197,5 @@ const char JSON_palette_names[] PROGMEM = R"=====([
 "Magenta","Magred","Yelmag","Yelblu","Orange & Teal","Tiamat","April Night","Orangery","C9","Sakura",
 "Aurora","Atlantica","C9 2","C9 New","Temperature","Aurora 2","Retro Clown","Candy","Toxy Reaf","Fairy Reaf",
 "Semi Blue","Pink Candy","Red Reaf","Aqua Flash","Yelblu Hot","Lite Light","Red Flash","Blink Red","Red Shift","Red Tide",
-"Candy2","Traffic Light"
+"Candy2","Traffic Light","Fireworks"
 ])=====";
